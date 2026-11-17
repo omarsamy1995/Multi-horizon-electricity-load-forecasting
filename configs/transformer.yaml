@@ -1,0 +1,31 @@
+model:
+  name: "transformer"
+  type: "transformer"
+  past_dim: 9
+  future_cal_dim: 8
+  d_model: 128
+  nhead: 4
+  num_encoder_layers: 2
+  num_decoder_layers: 2
+  dim_feedforward: 256
+  dropout: 0.1
+
+data:
+  processed_dir: "data/processed"
+  scaler_path: "checkpoints/aep_scaler.pkl"
+  lookback: 168
+  horizon: 24
+  num_workers: 0
+
+training:
+  batch_size: 64
+  epochs: 20
+  learning_rate: 0.0005
+  weight_decay: 0.0001
+  patience: 5
+  gradient_clip_val: 1.0
+  quantiles: [0.1, 0.5, 0.9]
+  scheduler:
+    factor: 0.5
+    patience: 2
+    min_lr: 0.00001

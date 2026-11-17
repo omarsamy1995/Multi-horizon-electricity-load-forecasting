@@ -1,0 +1,41 @@
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache & bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Datasets (Raw and Processed)
+data/raw/
+data/processed/
+*.csv
+*.parquet
+
+# Model Checkpoints & Artifacts (Ignore binary weights, keep directory .gitkeep)
+checkpoints/*.pt
+checkpoints/*.pth
+checkpoints/*.pkl
+!checkpoints/.gitkeep
+
+# Experiments, Runs & Logs (Keep directory .gitkeep)
+experiments/*
+!experiments/.gitkeep
+
+# IDEs & OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Reports build artifacts (Keep .gitkeep)
+report/*.aux
+report/*.log
+report/*.out
+report/*.synctex.gz
+!report/.gitkeep

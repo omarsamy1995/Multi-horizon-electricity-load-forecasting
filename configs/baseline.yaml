@@ -1,0 +1,29 @@
+model:
+  name: "mlp_baseline"
+  type: "mlp"
+  lookback: 168
+  past_dim: 9
+  horizon: 24
+  future_cal_dim: 8
+  hidden_dim: 256
+  dropout: 0.1
+
+data:
+  processed_dir: "data/processed"
+  scaler_path: "checkpoints/aep_scaler.pkl"
+  lookback: 168
+  horizon: 24
+  num_workers: 0
+
+training:
+  batch_size: 128
+  epochs: 15
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  patience: 5
+  gradient_clip_val: 1.0
+  quantiles: [0.1, 0.5, 0.9]
+  scheduler:
+    factor: 0.5
+    patience: 2
+    min_lr: 0.00001
