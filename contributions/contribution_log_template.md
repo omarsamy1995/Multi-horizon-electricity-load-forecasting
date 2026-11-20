@@ -9,9 +9,9 @@ This document tracks weekly individual contributions, engineering tasks, time sp
 ---
 
 ## Team Members
-- **Member 1 (Lead / Architecture):** [Full Name / Student ID / GitHub Username]
-- **Member 2 (Data / Modeling):** [Full Name / Student ID / GitHub Username]
-- **Member 3 (Evaluation / Web App):** [Full Name / Student ID / GitHub Username]
+- **Omar Samy (Lead / Architecture):** [Omar Samy / 202301669 / OmarSamy]
+- **Mohamed Ibrahim (Data / Modeling):** [Mohamed Ibrahim / 202301880 / MohamedIbraim]
+- **Yousef Omar (Evaluation / Web App):** [Yousef Omar / 202301858 / YousefOmar]
 
 ---
 
