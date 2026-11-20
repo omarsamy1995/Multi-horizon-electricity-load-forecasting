@@ -21,6 +21,7 @@ data/processed/
 checkpoints/*.pt
 checkpoints/*.pth
 checkpoints/*.pkl
+checkpoints/*.h5
 !checkpoints/.gitkeep
 
 # Experiments, Runs & Logs (Keep directory .gitkeep)
