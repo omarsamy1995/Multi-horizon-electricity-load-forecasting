@@ -24,7 +24,8 @@ checkpoints/*.pkl
 !checkpoints/.gitkeep
 
 # Experiments, Runs & Logs (Keep directory .gitkeep)
-experiments/*
+*.csv
+*.json
 !experiments/.gitkeep
 
 # IDEs & OS files

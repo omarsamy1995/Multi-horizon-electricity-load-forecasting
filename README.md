@@ -186,15 +186,15 @@ flowchart TD
 <a id="custom-pytorch-primitives"></a>
 ## 🧠 Custom PyTorch Primitives Engineered from Scratch
 
-To satisfy the core academic requirement of authoring structural architectural primitives from first principles rather than importing black-box forecasting packages, all key layers are implemented directly in [`src/models/custom_layers.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py):
+To satisfy the core academic requirement of authoring structural architectural primitives from first principles rather than importing black-box forecasting packages, all key layers are implemented directly in [`src/models/custom_layers.py`](src/models/custom_layers.py):
 
 | Custom Primitive | Source Code Location | Mathematical Role & Functionality |
 | :--- | :--- | :--- |
-| **`MultiHorizonQuantileLoss`** | [`custom_layers.py#L11-L40`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py#L11-L40) | Joint asymmetric pinball loss optimizing $q \in \{0.10, 0.50, 0.90\}$ across all 24 horizons |
-| **`NonCrossingQuantileHead`** | [`custom_layers.py#L141-L176`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py#L141-L176) | Strictly positive $\text{Softplus}$ delta projections preventing quantile crossing |
-| **`GatedLinearUnit (GLU)`** | [`custom_layers.py#L42-L60`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py#L42-L60) | Non-linear feature gating suppressing irrelevant temporal noise: $(W_1 x + b_1) \odot \sigma(W_2 x + b_2)$ |
-| **`GatedResidualNetwork (GRN)`** | [`custom_layers.py#L62-L105`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py#L62-L105) | Adaptive depth block with skip-connections, LayerNorm, and context integration |
-| **`InterpretableMultiHeadAttention`** | [`custom_layers.py#L107-L139`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py#L107-L139) | Head-averaged attention matrix $\bar{A} \in \mathbb{R}^{B \times 24 \times 168}$ preserving temporal interpretability |
+| **`MultiHorizonQuantileLoss`** | [`custom_layers.py#L11-L40`](src/models/custom_layers.py#L11-L40) | Joint asymmetric pinball loss optimizing $q \in \{0.10, 0.50, 0.90\}$ across all 24 horizons |
+| **`NonCrossingQuantileHead`** | [`custom_layers.py#L141-L176`](src/models/custom_layers.py#L141-L176) | Strictly positive $\text{Softplus}$ delta projections preventing quantile crossing |
+| **`GatedLinearUnit (GLU)`** | [`custom_layers.py#L42-L60`](src/models/custom_layers.py#L42-L60) | Non-linear feature gating suppressing irrelevant temporal noise: $(W_1 x + b_1) \odot \sigma(W_2 x + b_2)$ |
+| **`GatedResidualNetwork (GRN)`** | [`custom_layers.py#L62-L105`](src/models/custom_layers.py#L62-L105) | Adaptive depth block with skip-connections, LayerNorm, and context integration |
+| **`InterpretableMultiHeadAttention`** | [`custom_layers.py#L107-L139`](src/models/custom_layers.py#L107-L139) | Head-averaged attention matrix $\bar{A} \in \mathbb{R}^{B \times 24 \times 168}$ preserving temporal interpretability |
 
 ---
 
@@ -413,8 +413,8 @@ streamlit run demo/app.py
 
 ```bash
 # Clone the research repository
-git clone https://github.com/your-org/Deep_Learning.git
-cd Deep_Learning
+git clone https://github.com/omarsamy1995/Multi-horizon-electricity-load-forecasting.git
+cd Multi-horizon-electricity-load-forecasting
 
 # Create virtual environment
 python -m venv .venv
@@ -512,7 +512,7 @@ python experiments/plot_comparisons.py
 ## 📂 Repository Layout
 
 ```
-Deep_Learning/
+Multi-horizon-electricity-load-forecasting/
 ├── README.md                           # Comprehensive documentation, benchmarks & guides
 ├── requirements.txt                    # Pinned production library dependencies
 ├── .gitignore                          # Excludes virtualenvs, weights (.pt), and datasets
@@ -559,12 +559,6 @@ Deep_Learning/
 ├── demo/                               # Web deployment application
 │   └── app.py                          # Interactive Streamlit dashboard with Plotly ribbons
 │
-├── report/                             # Academic report documentation
-│   ├── Technical_Report.md             # Complete formal academic research report
-│   ├── Technical_Report.html           # Styled HTML research document
-│   ├── TeamName_Report.pdf             # Formatted submission report PDF
-│   └── build_report_pdf.py             # Automated WeasyPrint PDF compiler
-│
 └── contributions/                      # Academic accountability & auditing
     └── contribution_log_template.md    # Weekly individual contribution logs with code evidence
 ```
@@ -581,7 +575,7 @@ Deep_Learning/
 | **Yousef Omar** | `202301858` | **Full-Stack ML (Evaluation / Web App)** | Author of the evaluation harness (`evaluate.py`), designed the future calendar ablation study, engineered the interactive Streamlit dashboard (`demo/app.py`), conducted diagnostic failure mode analysis, and compiled the technical report. |
 
 > [!IMPORTANT]
-> Detailed individual weekly hours, commit hashes, training run IDs, and verification co-signatures are maintained in [`contributions/contribution_log_template.md`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/contributions/contribution_log_template.md) and compiled into official student logs (`Team AL_Log.pdf`).
+> Detailed individual weekly hours, commit hashes, training run IDs, and verification co-signatures are maintained in [`contributions/contribution_log_template.md`](contributions/contribution_log_template.md) and compiled into official student logs (`TeamAL_202301669_Log.pdf`, `TeamAL_202301880_Log.pdf`, `TeamAL_202301858_Log.pdf`).
 
 ---
 
