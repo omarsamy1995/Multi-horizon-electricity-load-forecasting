@@ -1,24 +1,15 @@
 """
-Baseline models for Multi-Horizon Electricity Load Forecasting:
-1. SeasonalNaiveBaseline (Domain benchmark: Weekly seasonal persistence)
-2. MLPBaseline (Parametric baseline: Multi-Layer Perceptron on flattened past + future in tf.keras)
+Baseline models: SeasonalNaiveBaseline (168h weekly persistence) and MLPBaseline in tf.keras.
 """
 
 from typing import Optional, Union, Tuple, Dict, Any
 import numpy as np
 import tensorflow as tf
-
 from src.models.custom_layers import NonCrossingQuantileHead
 
 
 class SeasonalNaiveBaseline:
-    """
-    Non-parametric Seasonal Naive baseline.
-    
-    Given hourly electricity demand, load exhibits a strong 168-hour (7 days) periodicity.
-    The weekly seasonal naive forecast takes the observed values from the same time 
-    one week prior (t - 168 to t - 145), corresponding to indices [0:24] of x_past.
-    """
+    """Non-parametric baseline copying past weekly values (t-168 to t-145) for all 3 quantiles."""
     def __init__(self, mode: str = "weekly"):
         self.mode = mode
 
@@ -27,50 +18,24 @@ class SeasonalNaiveBaseline:
         x_past: Union[tf.Tensor, np.ndarray],
         x_future_cal: Optional[Union[tf.Tensor, np.ndarray]] = None
     ) -> Union[tf.Tensor, np.ndarray]:
-        """
-        Args:
-            x_past: (B, 168, 9) historical features where feature 0 is target load.
-            x_future_cal: (B, 24, 8) future calendar features (unused in naive baseline).
-        Returns:
-            preds: (B, 24, 3) where columns correspond to [q10, q50, q90].
-        """
-        is_tf = tf.is_tensor(x_past)
-        if is_tf:
-            if self.mode == "weekly":
-                pred_median = x_past[:, :24, 0]  # (B, 24)
-            elif self.mode == "daily":
-                pred_median = x_past[:, -24:, 0]  # (B, 24)
-            else:
-                raise ValueError(f"Unknown mode: {self.mode}")
-            preds = tf.repeat(tf.expand_dims(pred_median, axis=-1), repeats=3, axis=-1)
-            return preds
-        else:
-            x_past_np = np.asarray(x_past)
-            if self.mode == "weekly":
-                pred_median = x_past_np[:, :24, 0]
-            elif self.mode == "daily":
-                pred_median = x_past_np[:, -24:, 0]
-            else:
-                raise ValueError(f"Unknown mode: {self.mode}")
-            preds = np.repeat(np.expand_dims(pred_median, axis=-1), repeats=3, axis=-1)
-            return preds
+        # x_past: (B, 168, 9) where feature 0 is load -> preds: (B, 24, 3)
+        if tf.is_tensor(x_past):
+            slice_idx = slice(0, 24) if self.mode == "weekly" else slice(-24, None)
+            pred_median = x_past[:, slice_idx, 0]  # (B, 24)
+            return tf.repeat(tf.expand_dims(pred_median, axis=-1), repeats=3, axis=-1)
 
-    def __call__(
-        self,
-        x_past: Union[tf.Tensor, np.ndarray],
-        x_future_cal: Optional[Union[tf.Tensor, np.ndarray]] = None
-    ) -> Union[tf.Tensor, np.ndarray]:
+        x_np = np.asarray(x_past)
+        slice_idx = slice(0, 24) if self.mode == "weekly" else slice(-24, None)
+        pred_median = x_np[:, slice_idx, 0]
+        return np.repeat(np.expand_dims(pred_median, axis=-1), repeats=3, axis=-1)
+
+    def __call__(self, x_past, x_future_cal=None):
         return self.predict(x_past, x_future_cal)
 
 
 @tf.keras.utils.register_keras_serializable(package="models")
 class MLPBaseline(tf.keras.Model):
-    """
-    Parametric MLP Baseline:
-    Flattens past window (168 * 9) and future calendar (24 * 8), passes through
-    fully connected layers with dropout, and outputs (B, 24, 3) quantiles with
-    non-crossing guarantee via NonCrossingQuantileHead.
-    """
+    """Flattens past (168*9) and future (24*8), passes through Dense+LN blocks to NonCrossingQuantileHead."""
     def __init__(
         self,
         lookback: int = 168,
@@ -111,13 +76,7 @@ class MLPBaseline(tf.keras.Model):
         x_future_cal: Optional[tf.Tensor] = None,
         training: Optional[bool] = None
     ) -> tf.Tensor:
-        """
-        Accepts:
-            inputs: x_past (B, 168, 9) or tuple (x_past, x_future_cal)
-            x_future_cal: (B, 24, 8) if inputs is solely x_past
-        Returns:
-            (B, 24, 3)
-        """
+        # Handles single inputs or tuple (x_past, x_future_cal)
         if isinstance(inputs, (tuple, list)):
             x_past, x_future_cal = inputs[0], inputs[1]
         elif isinstance(inputs, dict):
@@ -126,21 +85,11 @@ class MLPBaseline(tf.keras.Model):
         else:
             x_past = inputs
 
-        past_flat = self.flatten_past(x_past)
-        future_flat = self.flatten_future(x_future_cal)
-        x = tf.concat([past_flat, future_flat], axis=-1)
-
-        feat = self.fc1(x)
-        feat = self.ln1(feat)
-        feat = self.relu1(feat)
-        feat = self.drop1(feat, training=training)
-
-        feat = self.fc2(feat)
-        feat = self.ln2(feat)
-        feat = self.relu2(feat)
-        feat = self.drop2(feat, training=training)
-
-        return self.head(feat)
+        # Flatten past (B, 1512) and future (B, 192) -> concat to (B, 1704)
+        x = tf.concat([self.flatten_past(x_past), self.flatten_future(x_future_cal)], axis=-1)
+        feat = self.drop1(self.relu1(self.ln1(self.fc1(x))), training=training)
+        feat = self.drop2(self.relu2(self.ln2(self.fc2(feat))), training=training)
+        return self.head(feat)  # (B, 24, 3)
 
     def get_config(self) -> Dict[str, Any]:
         config = super().get_config()

@@ -1,24 +1,15 @@
 """
-Classic Deep Learning Model: Sequence-to-Sequence GRU with Future Calendar Decoder.
-
-Architecture:
-- Encoder: Multi-layer GRU processing historical observations (168 timesteps, 9 features)
-- Decoder: GRU taking future calendar features (24 timesteps, 8 features) + Bahdanau Temporal Attention
-- Quantile Projection Head: Guarantees non-crossing quantiles [q10, q50, q90]
+Classic Recurrent Deep Learning: Seq2Seq GRU with Bahdanau Temporal Attention.
 """
 
 from typing import Tuple, Optional, Union, Dict, Any
 import tensorflow as tf
-
 from src.models.custom_layers import NonCrossingQuantileHead
 
 
 @tf.keras.utils.register_keras_serializable(package="models")
 class BahdanauAttention(tf.keras.layers.Layer):
-    """
-    Additive Attention mechanism (Bahdanau et al.)
-    Computes attention alignment between decoder state and encoder memory.
-    """
+    """Additive attention: score = v^T * tanh(W_enc * memory + W_dec * query)."""
     def __init__(self, hidden_dim: int, **kwargs):
         super().__init__(**kwargs)
         self.hidden_dim = hidden_dim
@@ -27,18 +18,10 @@ class BahdanauAttention(tf.keras.layers.Layer):
         self.v = tf.keras.layers.Dense(1, use_bias=False, name="v")
 
     def call(self, query: tf.Tensor, memory: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
-        """
-        Args:
-            query: Current decoder state (B, 1, hidden_dim)
-            memory: All encoder hidden states (B, L_enc, hidden_dim)
-        Returns:
-            context: (B, 1, hidden_dim)
-            weights: (B, 1, L_enc)
-        """
-        score = self.v(tf.nn.tanh(self.w_enc(memory) + self.w_dec(query)))  # (B, L_enc, 1)
-        score = tf.transpose(score, [0, 2, 1])                                # (B, 1, L_enc)
-        weights = tf.nn.softmax(score, axis=-1)                               # (B, 1, L_enc)
-        context = tf.matmul(weights, memory)                                  # (B, 1, hidden_dim)
+        # query: (B, 1, hidden_dim) | memory: (B, 168, hidden_dim)
+        score = self.v(tf.nn.tanh(self.w_enc(memory) + self.w_dec(query)))  # (B, 168, 1)
+        weights = tf.nn.softmax(tf.transpose(score, [0, 2, 1]), axis=-1)    # (B, 1, 168)
+        context = tf.matmul(weights, memory)                                 # (B, 1, hidden_dim)
         return context, weights
 
     def get_config(self) -> Dict[str, Any]:
@@ -49,15 +32,7 @@ class BahdanauAttention(tf.keras.layers.Layer):
 
 @tf.keras.utils.register_keras_serializable(package="models")
 class Seq2SeqGRU(tf.keras.Model):
-    """
-    Seq2Seq GRU with Future Calendar Conditioning and Temporal Attention in tf.keras.
-    
-    Accepts:
-        x_past: Tensor of shape (B, 168, 9)
-        x_future_cal: Tensor of shape (B, 24, 8)
-    Returns:
-        Tensor of shape (B, 24, 3) for quantiles [0.1, 0.5, 0.9]
-    """
+    """Encodes x_past (B, 168, 9), decodes step-by-step with x_future_cal (B, 24, 8) and attention."""
     def __init__(
         self,
         past_dim: int = 9,
@@ -77,40 +52,23 @@ class Seq2SeqGRU(tf.keras.Model):
         self.dropout_rate = dropout
         self.use_attention = use_attention
 
-        # Encoder projection & GRU layers
+        # Encoder layers
         self.enc_in_proj = tf.keras.layers.Dense(hidden_dim, name="enc_in_proj")
         self.enc_relu = tf.keras.layers.ReLU(name="enc_relu")
         self.enc_drop = tf.keras.layers.Dropout(dropout, name="enc_drop")
+        self.encoder_gru_layers = [
+            tf.keras.layers.GRU(hidden_dim, return_sequences=True, return_state=True, name=f"encoder_gru_{i}")
+            for i in range(num_layers)
+        ]
 
-        self.encoder_gru_layers = []
-        for i in range(num_layers):
-            self.encoder_gru_layers.append(
-                tf.keras.layers.GRU(
-                    hidden_dim,
-                    return_sequences=True,
-                    return_state=True,
-                    name=f"encoder_gru_{i}"
-                )
-            )
-
-        # Decoder projection
+        # Decoder layers
         self.dec_in_proj = tf.keras.layers.Dense(hidden_dim, name="dec_in_proj")
         self.dec_relu = tf.keras.layers.ReLU(name="dec_relu")
         self.dec_drop = tf.keras.layers.Dropout(dropout, name="dec_drop")
-
-        # Decoder RNN Cells for step-by-step decoding
-        decoder_cells = [
-            tf.keras.layers.GRUCell(hidden_dim, name=f"decoder_gru_cell_{i}")
-            for i in range(num_layers)
-        ]
+        decoder_cells = [tf.keras.layers.GRUCell(hidden_dim, name=f"decoder_gru_cell_{i}") for i in range(num_layers)]
         self.decoder_rnn = tf.keras.layers.StackedRNNCells(decoder_cells, name="decoder_stacked_cells")
 
-        if use_attention:
-            self.attention = BahdanauAttention(hidden_dim, name="bahdanau_attention")
-        else:
-            self.attention = None
-
-        # Non-crossing quantile projection head
+        self.attention = BahdanauAttention(hidden_dim, name="bahdanau_attention") if use_attention else None
         self.quantile_head = NonCrossingQuantileHead(output_horizon=None, name="quantile_head")
 
     def call(
@@ -128,55 +86,37 @@ class Seq2SeqGRU(tf.keras.Model):
         else:
             x_past = inputs
 
-        B = tf.shape(x_past)[0]
-        T_future = tf.shape(x_future_cal)[1]
-
-        # 1. Encode past observations
-        enc_in = self.enc_drop(self.enc_relu(self.enc_in_proj(x_past)), training=training)
-
-        h = enc_in
+        # 1. Encode past observations: (B, 168, 9) -> enc_out: (B, 168, hidden_dim)
+        h = self.enc_drop(self.enc_relu(self.enc_in_proj(x_past)), training=training)
         states = []
-        for gru_layer in self.encoder_gru_layers:
-            h, state = gru_layer(h, training=training)
+        for gru in self.encoder_gru_layers:
+            h, state = gru(h, training=training)
             states.append(state)
         enc_out = h
 
-        # 2. Decode future calendar step-by-step
+        # 2. Decode future calendar step-by-step: (B, 24, 8) -> (B, 24, hidden_dim)
         dec_inputs = self.dec_drop(self.dec_relu(self.dec_in_proj(x_future_cal)), training=training)
-
-        cur_states = states  # list of hidden states per layer
-        step_quantiles_list = []
-        attn_list = []
+        cur_states = states
+        step_quantiles, attn_weights_list = [], []
 
         for t in range(24):
             cal_step = dec_inputs[:, t, :]  # (B, hidden_dim)
-
             if self.use_attention:
                 query = tf.expand_dims(cur_states[-1], axis=1)  # (B, 1, hidden_dim)
-                context, attn_w = self.attention(query, enc_out)  # context: (B, 1, hidden_dim), attn_w: (B, 1, 168)
-                attn_list.append(attn_w)
-                context_2d = tf.squeeze(context, axis=1)
-                dec_in_step = tf.concat([cal_step, context_2d], axis=-1)  # (B, 2*hidden_dim)
+                context, attn_w = self.attention(query, enc_out)  # context: (B, 1, hidden_dim)
+                attn_weights_list.append(attn_w)
+                dec_in_step = tf.concat([cal_step, tf.squeeze(context, axis=1)], axis=-1)
             else:
                 dec_in_step = cal_step
 
             dec_out, cur_states = self.decoder_rnn(dec_in_step, cur_states, training=training)
+            dec_out_3d = tf.expand_dims(dec_out, axis=1)
+            head_feat = tf.concat([dec_out_3d, context], axis=-1) if self.use_attention else dec_out_3d
+            step_quantiles.append(self.quantile_head(head_feat))  # (B, 1, 3)
 
-            if self.use_attention:
-                dec_out_3d = tf.expand_dims(dec_out, axis=1)  # (B, 1, hidden_dim)
-                head_feat = tf.concat([dec_out_3d, context], axis=-1)  # (B, 1, 2*hidden_dim)
-            else:
-                head_feat = tf.expand_dims(dec_out, axis=1)  # (B, 1, hidden_dim)
-
-            q_step = self.quantile_head(head_feat)  # (B, 1, 3)
-            step_quantiles_list.append(q_step)
-
-        quantiles = tf.concat(step_quantiles_list, axis=1)  # (B, 24, 3)
-
+        quantiles = tf.concat(step_quantiles, axis=1)  # (B, 24, 3)
         if return_attention and self.use_attention:
-            attn_all = tf.concat(attn_list, axis=1)  # (B, 24, 168)
-            return quantiles, attn_all
-
+            return quantiles, tf.concat(attn_weights_list, axis=1)  # (B, 24, 168)
         return quantiles
 
     def get_config(self) -> Dict[str, Any]:
