@@ -31,6 +31,9 @@ def clean_time_series(df: pd.DataFrame, target_col: str = "AEP_MW") -> pd.DataFr
     df = df.asfreq("h")
     
     missing_before = df[target_col].isna().sum()
+
+    # interpolate لتخمين القيم المفقودة بناء على القيم المجاورة فى نفس العمود
+    
     df[target_col] = df[target_col].interpolate(method="linear")
     print(f"[INFO] Missing hourly timestamps filled via linear interpolation: {missing_before}")
     

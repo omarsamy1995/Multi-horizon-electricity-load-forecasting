@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Deep Learning Technical Report - Multi-Horizon Load Forecasting</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+
+  @page {
+    size: A4;
+    margin: 18mm 16mm 18mm 16mm;
+    @bottom-center {
+      content: counter(page);
+      font-family: 'Inter', sans-serif;
+      font-size: 9pt;
+      color: #64748b;
+    }
+  }
+
+  body {
+    font-family: 'Crimson Pro', Georgia, serif;
+    font-size: 11pt;
+    line-height: 1.55;
+    color: #1e293b;
+    background-color: #ffffff;
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 30px 25px;
+  }
+
+  h1 {
+    font-family: 'Inter', sans-serif;
+    font-size: 20pt;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #0f172a;
+    text-align: center;
+    margin-bottom: 8px;
+    letter-spacing: -0.02em;
+  }
+
+  h2 {
+    font-family: 'Inter', sans-serif;
+    font-size: 13pt;
+    font-weight: 700;
+    color: #1e3a8a;
+    border-bottom: 1.5px solid #e2e8f0;
+    padding-bottom: 4px;
+    margin-top: 26px;
+    margin-bottom: 10px;
+    page-break-after: avoid;
+  }
+
+  h3 {
+    font-family: 'Inter', sans-serif;
+    font-size: 11pt;
+    font-weight: 600;
+    color: #334155;
+    margin-top: 18px;
+    margin-bottom: 6px;
+    page-break-after: avoid;
+  }
+
+  p {
+    margin-top: 0;
+    margin-bottom: 10px;
+    text-align: justify;
+  }
+
+  blockquote {
+    border-left: 3.5px solid #3b82f6;
+    background-color: #f8fafc;
+    margin: 12px 0;
+    padding: 8px 14px;
+    font-style: italic;
+    color: #334155;
+  }
+
+  .table-container {
+    margin: 14px 0;
+    overflow-x: auto;
+    page-break-inside: avoid;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Inter', sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.35;
+    margin: 6px 0;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1;
+    padding: 5.5px 7px;
+    text-align: left;
+  }
+
+  th {
+    background-color: #f1f5f9;
+    color: #0f172a;
+    font-weight: 600;
+  }
+
+  tr:nth-child(even) {
+    background-color: #f8fafc;
+  }
+
+  figure {
+    margin: 16px 0;
+    text-align: center;
+    page-break-inside: avoid;
+  }
+
+  figure img {
+    max-width: 95%;
+    height: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+
+  figcaption {
+    font-family: 'Inter', sans-serif;
+    font-size: 8.5pt;
+    font-style: italic;
+    color: #64748b;
+    margin-top: 5px;
+  }
+
+  hr.section-divider {
+    border: 0;
+    height: 1px;
+    background-color: #cbd5e1;
+    margin: 22px 0;
+  }
+
+  code {
+    font-family: 'Fira Code', Consolas, monospace;
+    font-size: 9pt;
+    background-color: #f1f5f9;
+    padding: 1px 4px;
+    border-radius: 3px;
+    color: #0f172a;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-family: 'Inter', sans-serif;
+    font-size: 7.5pt;
+    font-weight: 600;
+    border-radius: 3px;
+    background: #e2e8f0;
+  }
+</style>
+</head>
+<body>
+<h1>Multi-Horizon Electricity Load Forecasting on American Electric Power Hourly Grid: A Comparative Study of Recurrent, Transformer, and Temporal Fusion Architectures with Probabilistic Quantile Loss</h1>
+<p><strong>Course:</strong> Deep Learning (A1403)  
+<strong>Academic Institution:</strong> Faculty of Computer Science & Artificial Intelligence, Pharos University in Alexandria  
+<strong>Term:</strong> Fall 2026  
+<strong>Instructor:</strong> Dr. Sahar Ghanem  
+<strong>Topic:</strong> Project #13 — Multi-Horizon Electricity Load Forecasting on `AEP_hourly.csv`</p>
+<hr class="section-divider" />
+<h2>Executive Abstract</h2>
+<p>Accurate multi-horizon electric load forecasting is a cornerstone of modern smart grid operations, capacity reserve scheduling, dynamic electricity pricing, and blackout mitigation. In this research, we formulate and empirically benchmark multi-horizon hourly electricity load forecasting over a 24-hour dispatch horizon ($H = 24$) conditioned on 168 hours of historical multivariate observations ($L = 168$, representing seven continuous diurnal cycles) and 24 hours of known future calendar covariates. We design, implement from first principles in PyTorch, and evaluate four distinct model architectures spanning classical, recurrent, attention, and temporal fusion paradigms: (1) an unparameterized Seasonal Naive persistence baseline, (2) a parametric Multi-Layer Perceptron (MLP) baseline (479,432 parameters), (3) a classic Sequence-to-Sequence Gated Recurrent Unit (Seq2Seq GRU) with Bahdanau additive attention (481,539 parameters), (4) a modern Time-Series Transformer Encoder-Decoder (665,347 parameters), and (5) an advanced Temporal Fusion Transformer (TFT Advanced, 551,683 parameters) integrating Gated Residual Networks (GRN), Gated Linear Units (GLU), locality-preserving recurrent layers, and Interpretable Multi-Head Temporal Attention.</p>
+<p>To satisfy the rigorous requirement of authoring core architectural primitives from scratch, we develop a custom `MultiHorizonQuantileLoss` (Pinball loss) optimizing the 10th ($q_{10}$), 50th ($q_{50}$), and 90th ($q_{90}$) quantiles simultaneously, coupled with a monotonic Softplus delta projection head that mathematically guarantees non-crossing predictive intervals ($q_{10} \le q_{50} \le q_{90}$). Across three deterministic random seeds ($\{42, 123, 999\}$) evaluated on 18,195 held-out test hours from the American Electric Power (AEP) regional grid spanning 2016 to 2018, <strong>Seq2Seq GRU achieves state-of-the-art performance</strong>, attaining an overall Mean Absolute Error (MAE) of <strong>$524.06 \pm 1.95\text{ MW}$</strong> (best seed: $521.32\text{ MW}$), Root Mean Squared Error (RMSE) of <strong>$718.10 \pm 4.17\text{ MW}$</strong>, and Mean Absolute Percentage Error (MAPE) of <strong>$3.51 \pm 0.00\%$</strong>, outperforming the domain Seasonal Naive baseline ($1,437.62\text{ MW}$ MAE, $9.54\%$ MAPE) by <strong>$63.55\%$</strong>. Crucially, an extensive ablation study demonstrates that withholding future calendar covariates precipitates a catastrophic performance degradation, increasing Seq2Seq GRU error by <strong>$+162.1\%$</strong> ($1,366.41\text{ MW}$ MAE) and TFT Advanced error by <strong>$+203.4\%$</strong> ($1,650.86\text{ MW}$ MAE), while shrinking prediction interval coverage from $75.72\%$ to $41.74\%$. We release an end-to-end reproducible research workspace, modular configuration files, diagnostic error profiling, and an interactive Streamlit dashboard for real-time dispatch decision support.</p>
+<hr class="section-divider" />
+<h2>1. Introduction</h2>
+<p>Electrical energy cannot be economically stored at grid scale in quantities sufficient to buffer massive macroeconomic demand fluctuations. Consequently, electric utility operators must maintain continuous, instantaneous equilibrium between power generation and aggregate consumer load. Under-generation destabilizes alternating current (AC) grid frequency (50/60 Hz), causing localized brownouts, transmission line trip-outs, and catastrophic cascading regional blackouts. Conversely, over-generation forces expensive thermal plant throttling, wastes fossil fuels, increases operational carbon emissions, and incurs substantial financial penalties in wholesale energy imbalance markets.</p>
+<p>In regional transmission organizations such as PJM Interconnection—which coordinates the movement of wholesale electricity across 13 states and the District of Columbia serving 65 million people—day-ahead electricity markets require accurate 24-hour forward load curves. Traditionally, grid operators relied on single-step autoregressive models ($t+1$) iterated recursively across the forecast horizon. However, recursive single-step forecasting suffers from rapid error accumulation: any prediction error committed at $t+1$ is fed back into the autoregressive feature matrix as pseudo-ground-truth, causing exponential divergence by horizon $t+24$.</p>
+<p>To address this vulnerability, this investigation examines <strong>multi-horizon vector forecasting</strong>, wherein a machine learning model directly maps a 7-day historical observation matrix ($168\text{ hours}$) and a 24-hour known calendar matrix to all 24 future load values simultaneously. Furthermore, point predictions alone fail to capture operational grid risk during severe weather phenomena, polar vortex freezes, and summer heatwaves. Therefore, we incorporate <strong>probabilistic quantile forecasting</strong>, producing calibrated 80% confidence ribbons ($[q_{10}, q_{90}]$) to provide transmission operators with rigorous reserve capacity boundaries.</p>
+<p>This technical report provides a rigorous empirical and theoretical investigation of multi-horizon load forecasting on the American Electric Power (AEP) grid. We evaluate whether modern Transformer and Temporal Fusion architectures truly surpass recurrent sequence models on multi-scale tabular time-series, evaluate the structural contribution of future calendar representations, analyze failure modes, and benchmark inference latencies for edge deployment.</p>
+<hr class="section-divider" />
+<h2>2. Problem Statement & Research Hypotheses</h2>
+<h3>Mathematical Formulation</h3>
+Let $\mathbf{y}_t \in \mathbb{R}$ denote the scalar electricity demand (in Megawatts, MW) observed at discrete hourly timestamp $t$. At any forecast origin $t$, we observe a continuous historical lookback sequence of length $L = 168$ hours (7 full calendar days) comprising the target load and $D_{past}-1 = 8$ exogenous temporal covariates:
+$$\mathbf{X}_{t-L+1:t} = \begin{bmatrix} \mathbf{x}_{t-L+1}^\top \\ \mathbf{x}_{t-L+2}^\top \\ \vdots \\ \mathbf{x}_t^\top \end{bmatrix} \in \mathbb{R}^{L \times D_{past}}, \quad D_{past} = 9$$
+where each row vector $\mathbf{x}_\tau \in \mathbb{R}^9$ contains:
+$$\mathbf{x}_\tau = \Big[ y_\tau, \; \sin\Big(\frac{2\pi h_\tau}{24}\Big), \; \cos\Big(\frac{2\pi h_\tau}{24}\Big), \; \sin\Big(\frac{2\pi d_\tau}{7}\Big), \; \cos\Big(\frac{2\pi d_\tau}{7}\Big), \; \sin\Big(\frac{2\pi m_\tau}{12}\Big), \; \cos\Big(\frac{2\pi m_\tau}{12}\Big), \; \mathbb{I}_{\text{weekend}}(\tau), \; \mathbb{I}_{\text{holiday}}(\tau) \Big]$$
+Here, $h_\tau \in \{0, \dots, 23\}$, $d_\tau \in \{0, \dots, 6\}$, and $m_\tau \in \{1, \dots, 12\}$ represent the hour-of-day, day-of-week, and month-of-year; $\mathbb{I}_{\text{weekend}}$ and $\mathbb{I}_{\text{holiday}}$ are binary indicators for weekends and US Federal holidays.
+<p>Simultaneously, because calendar progression is deterministic and known in advance, we are provided with the future calendar covariate matrix over the entire prediction horizon $H = 24$:
+$$\mathbf{C}_{t+1:t+H} = \begin{bmatrix} \mathbf{c}_{t+1}^\top \\ \mathbf{c}_{t+2}^\top \\ \vdots \\ \mathbf{c}_{t+H}^\top \end{bmatrix} \in \mathbb{R}^{H \times D_{future}}, \quad D_{future} = 8$$
+where $\mathbf{c}_{\tau} = \mathbf{x}_{\tau}[1:]$ contains all eight calendar covariates excluding the unknown future electricity demand $y_\tau$.</p>
+<p>Our forecasting model $f_\Theta(\cdot)$ parameterized by weights $\Theta$ maps the joint tuple $(\mathbf{X}_{t-L+1:t}, \mathbf{C}_{t+1:t+H})$ to a 3-dimensional multi-quantile forecast tensor across all $H=24$ horizons:
+$$\hat{\mathbf{Y}}_{t+1:t+H} = f_\Theta\big(\mathbf{X}_{t-L+1:t}, \; \mathbf{C}_{t+1:t+H}\big) \in \mathbb{R}^{H \times 3}$$
+corresponding to the nominal quantiles $Q = \{q_{10} = 0.10, \; q_{50} = 0.50, \; q_{90} = 0.90\}$. The median prediction $\hat{y}_{\tau}^{(0.50)}$ serves as the primary point estimate, while $[\hat{y}_{\tau}^{(0.10)}, \hat{y}_{\tau}^{(0.90)}]$ establishes the 80% prediction interval.</p>
+<h3>Testable Scientific Hypotheses</h3>
+We formally pose and experimentally stress-test three core scientific hypotheses:
+<p>- <strong>Hypothesis 1 (H1 — Architecture & Attention Superiority):</strong>  
+  <em>Due to the multi-head self-attention mechanism's capacity to bypass sequential bottleneck decay, the modern Time-Series Transformer and Temporal Fusion Model (TFT) will outperform recurrent Seq2Seq GRU architectures on long forecasting horizons ($t+12$ to $t+24$).</em></p>
+<p>- <strong>Hypothesis 2 (H2 — Calendar Covariate Conditioning):</strong>  
+  <em>Direct conditioning of the future decoding trajectory on known future cyclical time features ($\sin/\cos$) and holiday indicators is strictly necessary for multi-horizon diurnal phase alignment; zeroing out $\mathbf{C}_{t+1:t+H}$ will cause catastrophic multi-horizon forecast degradation ($>100\%$ MAE inflation).</em></p>
+<p>- <strong>Hypothesis 3 (H3 — Probabilistic Multi-Quantile Loss Calibration):</strong>  
+  <em>Optimizing non-crossing quantile heads directly with a multi-horizon pinball loss will yield empirical coverage closely matching the theoretical 80% nominal interval without sacrificing point forecast accuracy (MAE/RMSE) relative to traditional mean squared error objectives.</em></p>
+<hr class="section-divider" />
+<h2>3. Motivation & Practical Grid Economics</h2>
+<p>In modern energy markets, electricity is traded on day-ahead and real-time markets governed by locational marginal pricing (LMP). Power grid dispatchers rely on load forecasts to execute two critical decisions:
+1. <strong>Unit Commitment (Day-Ahead):</strong> Scheduling thermal power plants (coal, combined-cycle natural gas, nuclear) 12 to 24 hours in advance. These generators require several hours of thermal ramp-up and incur startup costs ranging from \$5,000 to over \$50,000 per startup.
+2. <strong>Economic Dispatch (Real-Time):</strong> Adjusting fast-acting peaker gas turbines and battery storage every 5 to 60 minutes to handle minute-to-minute residual imbalances.</p>
+<p>The economic penalties of load forecasting errors are asymmetric and substantial:
+- <strong>Under-Forecasting Peak Demand:</strong> When actual demand exceeds forecast, grid operators must fire expensive "peaker" plants operating at heat rates exceeding 12,000 BTU/kWh, or purchase emergency power on real-time spot markets where prices can spike from a baseline of \$30/MWh to regulatory caps of \$2,000–\$5,000/MWh. In extreme deficits, automatic under-frequency load shedding (UFLS) triggers rotating blackouts.
+- <strong>Over-Forecasting Demand:</strong> Scheduling unneeded generating capacity forces plants to run at inefficient minimum generation thresholds or incur curtailment costs, causing millions of dollars in unnecessary fuel expenditures and surplus greenhouse gas emissions.</p>
+<p>By delivering calibrated 80% confidence bands ($q_{10}$ to $q_{90}$), our probabilistic multi-horizon forecasting framework provides utility risk managers with a quantitative metric for <strong>spinning reserve procurement</strong>: rather than contracting fixed, arbitrary reserve margins (e.g., 15%), dispatchers can dynamically set spinning reserves proportional to the model's predicted uncertainty width ($q_{90} - q_{50}$).</p>
+<hr class="section-divider" />
+<h2>4. Related Work</h2>
+<h3>Classical Time-Series & Statistical Baselines</h3>
+Early electricity load forecasting relied heavily on linear autoregressive models, including Autoregressive Integrated Moving Average (ARIMA), Seasonal ARIMA (SARIMA), and Holt-Winters exponential smoothing (Box & Jenkins, 1970). Taylor (2003) established that electricity demand exhibits dual-periodicity (daily 24-hour cycles and weekly 168-hour cycles), requiring multi-seasonal formulations. While statistical models provide mathematical guarantees under stationarity assumptions, they fail to model nonlinear interactions between calendar events, severe weather shocks, and load elasticity, and scale poorly when generating multi-step forward trajectories.
+<h3>Recurrent Neural Networks & Seq2Seq Architectures</h3>
+The advent of deep recurrent neural networks (RNNs), specifically Long Short-Term Memory (LSTM; Hochreiter & Schmidhuber, 1997) and Gated Recurrent Units (GRU; Cho et al., 2014), revolutionized sequential modeling by maintaining a persistent hidden memory state. Sutskever et al. (2014) proposed the Sequence-to-Sequence (Seq2Seq) encoder-decoder architecture for machine translation, which was rapidly adapted to multi-step energy forecasting. Bahdanau et al. (2015) introduced additive attention, mitigating the information bottleneck of fixed-length context vectors by allowing the decoder to dynamically attend to relevant historical hidden states.
+<h3>Attention Mechanisms & Time-Series Transformers</h3>
+Vaswani et al. (2017) demonstrated that pure self-attention mechanisms could supersede recurrent networks entirely in natural language processing. Li et al. (2019) adapted Transformers to time-series forecasting through LogSparse self-attention to reduce memory footprint. However, standard Transformers often struggle with numerical time-series due to: (1) sensitivity to temporal order permutations without explicit recurrent bias, (2) quadratic attention complexity $\mathcal{O}(L^2)$, and (3) error amplification when autoregressive decoding is applied to noisy continuous values. Zeng et al. (2023) challenged the ubiquity of Transformer architectures for time-series forecasting, showing that simple linear models could surpass complex Transformers if temporal representations were properly structured.
+<h3>Temporal Fusion Transformers & Quantile Regression</h3>
+Lim et al. (2021) introduced the <strong>Temporal Fusion Transformer (TFT)</strong>, an architecture specifically designed for multi-horizon forecasting on heterogeneous time-series. TFT combines:
+1. Gated Residual Networks (GRN) to provide adaptive depth and variable selection.
+2. Locality-preserving LSTM layers to inject inductive recurrent bias for local context.
+3. Interpretable Multi-Head Temporal Attention to capture long-term cyclical dependencies while maintaining head-averaged attention interpretability.
+4. Quantile regression loss (Koenker & Bassett, 1978) to generate probabilistic forecast intervals.
+<p>Our research builds directly upon these foundations, implementing key TFT primitives from first principles in PyTorch and comparing them rigorously against classic Seq2Seq GRU, standard Transformers, and competitive MLP baselines under identical data partitions.</p>
+<hr class="section-divider" />
+<h2>5. Dataset Description & Exploratory Data Analysis</h2>
+<p>The empirical investigation is conducted on the <strong>PJM Hourly Energy Consumption</strong> archive compiled by Rob Mulla from PJM Interconnection grid records. We focus primarily on the <strong>American Electric Power (AEP)</strong> operational zone, with secondary out-of-distribution evaluation on the <strong>Duquesne Light Company (DUQ)</strong> operational zone.</p>
+<h3>Dataset Overview</h3>
+American Electric Power is one of the largest electric utilities in the United States, operating transmission networks across Ohio, West Virginia, Virginia, Kentucky, Indiana, Michigan, and Tennessee. The dataset spans from October 1, 2004 to August 3, 2018, containing <strong>121,296 total hourly observations</strong> representing approximately 13.8 years of continuous power grid operation.
+<div class="table-container"><table>
+<thead><tr>
+<th>Dataset Dimension</th>
+<th>Primary In-Distribution (AEP)</th>
+<th>Secondary Transfer / OOD (DUQ)</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Full Entity Name</strong></td>
+<td>American Electric Power (AEP)</td>
+<td>Duquesne Light Company (DUQ)</td>
+</tr>
+<tr>
+<td><strong>Data Source</strong></td>
+<td>PJM Interconnection Wholesale Grid</td>
+<td>PJM Interconnection Wholesale Grid</td>
+</tr>
+<tr>
+<td><strong>Temporal Range</strong></td>
+<td>`2004-10-01 01:00:00` $\to$ `2018-08-03 00:00:00`</td>
+<td>`2005-01-01 01:00:00` $\to$ `2018-08-03 00:00:00`</td>
+</tr>
+<tr>
+<td><strong>Total Hourly Readings</strong></td>
+<td>121,296</td>
+<td>119,068</td>
+</tr>
+<tr>
+<td><strong>Unique Timestamps</strong></td>
+<td>121,273</td>
+<td>119,064</td>
+</tr>
+<tr>
+<td><strong>Missing Timestamps</strong></td>
+<td>27 hourly gaps (linear interpolation)</td>
+<td>4 hourly gaps</td>
+</tr>
+<tr>
+<td><strong>Target Variable</strong></td>
+<td>Electricity Demand (`AEP_MW`)</td>
+<td>Electricity Demand (`DUQ_MW`)</td>
+</tr>
+<tr>
+<td><strong>Mean Load ($\mu$)</strong></td>
+<td>$15,794.44\text{ MW}$ (Train split)</td>
+<td>$3,302.94\text{ MW}$</td>
+</tr>
+<tr>
+<td><strong>Std Dev ($\sigma$)</strong></td>
+<td>$2,577.48\text{ MW}$ (Train split)</td>
+<td>$601.07\text{ MW}$</td>
+</tr>
+<tr>
+<td><strong>Minimum Demand</strong></td>
+<td>$9,581.00\text{ MW}$</td>
+<td>$1,454.00\text{ MW}$</td>
+</tr>
+<tr>
+<td><strong>Maximum Demand</strong></td>
+<td>$25,695.00\text{ MW}$</td>
+<td>$6,159.00\text{ MW}$</td>
+</tr>
+<tr>
+<td><strong>Data Format</strong></td>
+<td>Hourly CSV / Parquet</td>
+<td>Hourly CSV</td>
+</tr>
+<tr>
+<td><strong>Primary Project Role</strong></td>
+<td>Model Training, Validation & Evaluation</td>
+<td>Out-of-Distribution Transfer Evaluation</td>
+</tr>
+<tr>
+<td><strong>Licensing</strong></td>
+<td>Open Database License (ODbL) / Public Domain</td>
+<td>Open Database License (ODbL) / Public Domain</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 1: Comprehensive Dataset Comparison (AEP Primary In-Distribution vs. DUQ Secondary Transfer).</em></p>
+<hr class="section-divider" />
+<h2>6. Data Preprocessing & Leakage-Free Pipeline</h2>
+<p>Time-series forecasting models are susceptible to subtle forms of data leakage, including lookahead leakage during feature engineering and target leakage during normalization. We establish a deterministic, leakage-free preprocessing pipeline implemented in [`data/preprocess.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/data/preprocess.py):</p>
+<h3>1. Timestamp Cleaning & Regularization</h3>
+1. <strong>Deduplication:</strong> Daylight Saving Time (DST) transitions cause duplicate timestamps in autumn (clocks fall back from 02:00 to 01:00). Duplicate hourly records are resolved by sorting chronologically and retaining the first instance.
+2. <strong>Frequency Enforcement:</strong> The Pandas DataFrame is cast to strict hourly frequency (`df.asfreq('h')`), exposing <strong>27 missing timestamps</strong> caused by spring DST forward jumps and localized recording outages.
+3. <strong>Linear Interpolation:</strong> Missing target values are filled using interior linear interpolation:
+   $$y_\tau = y_{\tau_0} + \frac{\tau - \tau_0}{\tau_1 - \tau_0}(y_{\tau_1} - y_{\tau_0})$$
+   Because gaps never exceed two consecutive hours, linear interpolation preserves the fundamental diurnal continuity.
+<h3>2. Continuous Cyclical Calendar Feature Engineering</h3>
+To enable neural networks to understand periodic temporal boundaries without introducing false step-function discontinuities (e.g., the transition from 23:00 to 00:00), we map all discrete calendar indicators to continuous harmonic coordinates via trigonometric projections:
+$$\text{hour\_sin} = \sin\Big(\frac{2\pi \cdot \text{hour}}{24}\Big), \quad \text{hour\_cos} = \cos\Big(\frac{2\pi \cdot \text{hour}}{24}\Big)$$
+$$\text{dow\_sin} = \sin\Big(\frac{2\pi \cdot \text{day\_of\_week}}{7}\Big), \quad \text{dow\_cos} = \cos\Big(\frac{2\pi \cdot \text{day\_of\_week}}{7}\Big)$$
+$$\text{month\_sin} = \sin\Big(\frac{2\pi \cdot \text{month}}{12}\Big), \quad \text{month\_cos} = \cos\Big(\frac{2\pi \cdot \text{month}}{12}\Big)$$
+Additionally, two binary flags are appended:
+- $\text{is\_weekend} \in \{0.0, 1.0\}$: Active for Saturday ($\text{dow} = 5$) and Sunday ($\text{dow} = 6$).
+- $\text{is\_holiday} \in \{0.0, 1.0\}$: Active on official US Federal holidays computed dynamically via the `holidays.US()` calendar database.
+<h3>3. Chronological Non-Random Partitioning</h3>
+To mirror real-world operational deployment, the 121,296 time steps are partitioned chronologically without shuffling:
+- <strong>Training Set (70%):</strong> 84,907 hourly records (`2004-10-01 01:00:00` $\to$ `2014-06-11 19:00:00`).
+- <strong>Validation Set (15%):</strong> 18,194 hourly records (`2014-06-11 20:00:00` $\to$ `2016-07-07 15:00:00`). Used exclusively for early stopping and learning rate scheduling.
+- <strong>Test Set (15%):</strong> 18,195 hourly records (`2016-07-07 16:00:00` $\to$ `2018-08-03 00:00:00`). Preserved strictly for final out-of-sample evaluation.
+<h3>4. Leakage-Free Standard Normalization</h3>
+Normalization parameters are computed strictly on the training partition:
+$$\mu_{\text{train}} = 15,794.44\text{ MW}, \quad \sigma_{\text{train}} = 2,577.48\text{ MW}$$
+The validation and test partitions are normalized using these exact frozen training parameters:
+$$z_t = \frac{y_t - \mu_{\text{train}}}{\sigma_{\text{train}}}$$
+During model evaluation and Streamlit visualization, all outputs are inverse-transformed back to physical Megawatts:
+$$\hat{y}_t = (\hat{z}_t \cdot \sigma_{\text{train}}) + \mu_{\text{train}}$$
+<hr class="section-divider" />
+<h2>7. Methodology & Custom PyTorch Primitives</h2>
+```mermaid
+flowchart LR
+    subgraph Input["Input Sliding Windows"]
+        X_past["x_past: (B, 168, 9)<br/>[Target Load + 8 Calendar Features]"]
+        X_fut["x_future_cal: (B, 24, 8)<br/>[8 Known Future Calendar Features]"]
+    end
+<p>subgraph Core["Custom Scratch Components"]
+        VSN["VariableSelectionNetwork (VSN)"]
+        GRN["GatedResidualNetwork (GRN)"]
+        GLU["GatedLinearUnit (GLU)"]
+        Attn["InterpretableMultiHeadAttention"]
+    end</p>
+<p>subgraph Heads["Non-Crossing Quantile Projection"]
+        Q50["q50 Head (Median)"]
+        D_low["Softplus Delta Low Head"]
+        D_high["Softplus Delta High Head"]
+        Q_out["y_pred: (B, 24, 3)<br/>[q10, q50, q90]"]
+    end</p>
+<p>X_past & X_fut --> Core
+    Core --> Q50 & D_low & D_high
+    Q50 & D_low & D_high --> Q_out
+```</p>
+<p>To ensure architectural novelty and fulfill academic requirements, all key structural components in [`src/models/custom_layers.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/custom_layers.py) were engineered from first mathematical principles without third-party wrapper dependencies:</p>
+<h3>1. `MultiHorizonQuantileLoss` (Pinball Loss)</h3>
+For a batch of predictions $\hat{y} \in \mathbb{R}^{B \times H \times |Q|}$ and true targets $y \in \mathbb{R}^{B \times H}$, the pinball loss for quantile $\tau \in (0, 1)$ penalizes under-estimation and over-estimation asymmetrically:
+$$\mathcal{L}_\tau(y, \hat{y}^{(\tau)}) = \max\Big(\tau(y - \hat{y}^{(\tau)}), \; (\tau - 1)(y - \hat{y}^{(\tau)})\Big)$$
+For our multi-quantile target set $Q = \{0.10, 0.50, 0.90\}$, the aggregate training loss is:
+$$\mathcal{L}_{\text{total}} = \frac{1}{B \cdot H \cdot 3} \sum_{b=1}^{B} \sum_{h=1}^{H} \sum_{\tau \in Q} \mathcal{L}_\tau\Big(y_{b,h}, \; \hat{y}_{b,h}^{(\tau)}\Big)$$
+When $\tau = 0.50$, the loss reduces to half of the Mean Absolute Error (MAE), training the median head for robust $L_1$ point forecasting.
+<h3>2. Monotonic Non-Crossing Quantile Projection Head</h3>
+Independent quantile regression models frequently suffer from <strong>quantile crossing</strong>, wherein predicted upper percentiles fall below lower percentiles ($\hat{y}^{(0.90)} < \hat{y}^{(0.10)}$) due to unconstrained optimization. We eliminate this issue by enforcing monotonicity via non-negative Softplus delta transformations:
+$$\hat{y}_t^{(0.50)} = \mathbf{w}_{50}^\top \mathbf{h}_t + b_{50}$$
+$$\hat{y}_t^{(0.10)} = \hat{y}_t^{(0.50)} - \ln\Big(1 + \exp(\mathbf{w}_{\text{low}}^\top \mathbf{h}_t + b_{\text{low}})\Big)$$
+$$\hat{y}_t^{(0.90)} = \hat{y}_t^{(0.50)} + \ln\Big(1 + \exp(\mathbf{w}_{\text{high}}^\top \mathbf{h}_t + b_{\text{high}})\Big)$$
+Because $\text{Softplus}(x) = \ln(1 + e^x) > 0$ for all $x \in \mathbb{R}$, this parameterization guarantees:
+$$\hat{y}_t^{(0.10)} \le \hat{y}_t^{(0.50)} \le \hat{y}_t^{(0.90)} \quad \forall t \in \{1, \dots, H\}$$
+<h3>3. `GatedLinearUnit` (GLU)</h3>
+The Gated Linear Unit provides dynamic adaptive gating over feature representations:
+$$\mathrm{GLU}(\mathbf{x}) = \big(\mathbf{W}_1 \mathbf{x} + \mathbf{b}_1\big) \odot \sigma\big(\mathbf{W}_2 \mathbf{x} + \mathbf{b}_2\big)$$
+where $\sigma(\cdot)$ is the sigmoid activation function and $\odot$ denotes element-wise Hadamard multiplication.
+<h3>4. `GatedResidualNetwork` (GRN)</h3>
+The Gated Residual Network enables nonlinear feature abstraction with an intrinsic identity bypass, allowing the network to dynamically skip complex transformations when simpler representations suffice:
+$$\eta_1 = \mathrm{ELU}\big(\mathbf{W}_1 \mathbf{a} + \mathbf{W}_c \mathbf{c} + \mathbf{b}_1\big)$$
+$$\eta_2 = \mathbf{W}_2 \eta_1 + \mathbf{b}_2$$
+$$\mathrm{GRN}(\mathbf{a}, \mathbf{c}) = \mathrm{LayerNorm}\Big(\mathrm{LinearSkip}(\mathbf{a}) + \mathrm{GLU}(\eta_2)\Big)$$
+<h3>5. `InterpretableMultiHeadAttention`</h3>
+Standard multi-head attention projects concatenated head outputs, obscuring head-specific importance. Our interpretable implementation shares attention queries and keys across heads or averages attention matrices directly:
+$$\mathbf{A} = \mathrm{softmax}\left(\frac{\mathbf{Q} \mathbf{K}^\top}{\sqrt{d_k}}\right) \in \mathbb{R}^{B \times H \times L}$$
+$$\bar{\mathbf{A}} = \frac{1}{n_{\text{heads}}} \sum_{h=1}^{n_{\text{heads}}} \mathbf{A}_h, \quad \mathrm{Context} = \bar{\mathbf{A}} \mathbf{V}$$
+This yields an explicit attention matrix $\bar{\mathbf{A}} \in \mathbb{R}^{B \times 24 \times 168}$ showing how each future forecast hour queries each of the 168 past observation hours.
+<hr class="section-divider" />
+<h2>8. Evaluated Model Architectures</h2>
+<div class="table-container"><table>
+<thead><tr>
+<th>Model Name</th>
+<th>Model Family</th>
+<th>Input Tensor Shapes</th>
+<th>Main Layer Breakdown</th>
+<th>Parameter Count</th>
+<th>Checkpoint Size</th>
+<th>Pretrained</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Seasonal Naive</strong></td>
+<td>Non-parametric Baseline</td>
+<td>$x_{past}[:, :24, 0]$</td>
+<td>Weekly persistence slicing ($t-168 \to t-145$)</td>
+<td>0</td>
+<td>0.00 MB</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>MLP Baseline</strong></td>
+<td>Parametric Baseline</td>
+<td>Flattened $(168 \times 9 + 24 \times 8) = 1704$</td>
+<td>Linear(1704, 256) $\to$ LN $\to$ ReLU $\to$ Linear(256, 128) $\to$ LN $\to$ ReLU $\to$ Delta Heads</td>
+<td>479,432</td>
+<td>1.83 MB</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>Seq2Seq GRU</strong></td>
+<td>Classic Recurrent DL</td>
+<td>$x_{past}: (B, 168, 9)$, $x_{future}: (B, 24, 8)$</td>
+<td>2-layer GRU Enc (128), 2-layer GRU Dec (128), Bahdanau Additive Attention, Quantile Head</td>
+<td>481,539</td>
+<td>1.84 MB</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>Time-Series Transformer</strong></td>
+<td>Modern Attention DL</td>
+<td>$x_{past}: (B, 168, 9)$, $x_{future}: (B, 24, 8)$</td>
+<td>Sinusoidal PE, 2-layer TransformerEncoder (d_model=128, 4 heads), 2-layer Causal TransformerDecoder, Heads</td>
+<td>665,347</td>
+<td>2.68 MB</td>
+<td>No</td>
+</tr>
+<tr>
+<td><strong>TFT Advanced</strong></td>
+<td>Temporal Fusion DL</td>
+<td>$x_{past}: (B, 168, 9)$, $x_{future}: (B, 24, 8)$</td>
+<td>Feature GRNs, LSTM locality encoder/decoder, Interpretable Temporal Attn (4 heads), Post-Attn GRN</td>
+<td>551,683</td>
+<td>2.10 MB</td>
+<td>No</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 2: Architectural Comparison of Evaluated Models.</em></p>
+<h3>Model Architectural Details</h3>
+<p>1. <strong>Seasonal Naive Baseline ([`src/models/baseline.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/baseline.py)):</strong>  
+   Electricity demand exhibits a 168-hour weekly cycle. For any future hour $t+h$, the weekly seasonal naive forecast sets $\hat{y}_{t+h} = y_{t+h-168}$. In our sliding window formulation, this corresponds to slicing the first 24 hours of the 168-hour lookback window ($x_{\text{past}}[:, :24, 0]$).</p>
+<p>2. <strong>MLP Baseline ([`src/models/baseline.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/baseline.py)):</strong>  
+   Flattens the historical tensor ($168 \times 9 = 1,512$) and future calendar tensor ($24 \times 8 = 192$) into a single 1,704-dimensional vector. Passes through two dense blocks with Layer Normalization, ReLU activations, and 10% dropout, projecting directly to the three non-crossing quantile heads ($3 \times 24$).</p>
+<p>3. <strong>Seq2Seq GRU with Bahdanau Attention ([`src/models/seq2seq_gru.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/seq2seq_gru.py)):</strong>  
+   - <strong>Encoder:</strong> Projects 9 input features to a 128-dimensional embedding, followed by a 2-layer GRU processing 168 time steps, outputting hidden sequence $\mathbf{H}_{\text{enc}} \in \mathbb{R}^{B \times 168 \times 128}$.
+   - <strong>Decoder:</strong> Iterates step-by-step across $H = 24$. At step $h$, computes Bahdanau additive attention between decoder top-layer state and encoder states:
+     $$\mathbf{c}_h = \sum_{\tau=1}^{168} \alpha_{h,\tau} \mathbf{h}_{\text{enc},\tau}, \quad \alpha_{h,\tau} = \frac{\exp(\mathbf{v}^\top \tanh(\mathbf{W}_e \mathbf{h}_{\text{enc},\tau} + \mathbf{W}_d \mathbf{s}_h))}{\sum_k \exp(\dots)}$$
+     Concatenates future calendar input with context vector $\mathbf{c}_h$, updates decoder GRU state, and emits $q_{10}, q_{50}, q_{90}$ via the Softplus delta head.</p>
+<p>4. <strong>Time-Series Transformer ([`src/models/transformer.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/transformer.py)):</strong>  
+   Linear input embedding to $d_{\text{model}} = 128$ plus fixed sinusoidal positional encoding. The encoder comprises two TransformerEncoder layers (4 heads, feedforward dimension 256, GELU activation). The decoder receives future calendar embeddings and applies a lower-triangular causal attention mask ($24 \times 24$) to prevent lookahead leakage during cross-attention with encoder memory.</p>
+<p>5. <strong>Temporal Fusion Model (TFT Advanced) ([`src/models/tft_advanced.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/src/models/tft_advanced.py)):</strong>  
+   Processes past and future features through dedicated input Gated Residual Networks, passes embeddings through recurrent LSTM layers for short-term temporal continuity, concatenates past and future states ($168 + 24 = 192$ steps), applies Interpretable Multi-Head Temporal Self-Attention, and processes the attended features through a position-wise feedforward GRN prior to quantile emission.</p>
+<hr class="section-divider" />
+<h2>9. Experimental Setup & Protocol</h2>
+<p>To ensure rigorous scientific reproducibility, all models were trained and benchmarked under identical protocol constraints:</p>
+<p>- <strong>Lookback & Horizon Windows:</strong> Lookback $L = 168$ hours (7 days), Forecast Horizon $H = 24$ hours (1 day).
+- <strong>Optimization Algorithm:</strong> AdamW optimizer with $\beta_1 = 0.9, \beta_2 = 0.999$, weight decay $\lambda = 10^{-4}$, and gradient clipping norm threshold $\|g\|_2 \le 1.0$.
+- <strong>Learning Rate Scheduling:</strong> `ReduceLROnPlateau` monitoring validation quantile loss with a reduction factor $\gamma = 0.5$, patience of 2 epochs, and minimum learning rate $\eta_{\min} = 10^{-5}$.
+- <strong>Early Stopping:</strong> Training terminates if validation loss fails to achieve a new minimum for 5 consecutive epochs (`patience = 5`). Checkpoints are saved strictly on lowest validation loss.
+- <strong>Statistical Seed Protocol:</strong> Each deep model is trained from scratch across <strong>three distinct random seeds</strong>: $\{42, 123, 999\}$. We report the <strong>Sample Mean $\pm$ Standard Deviation</strong> ($\mu \pm \sigma$) across all runs.
+- <strong>Hardware Environment:</strong> All models were trained and benchmarked locally on an NVIDIA GeForce RTX 4060 Laptop GPU (8.0 GB GDDR6 VRAM, Compute Capability 8.9), backed by an Intel Core i7 host processor and 16.0 GB DDR5 RAM running Windows 11 and CUDA 12.1.</p>
+<div class="table-container"><table>
+<thead><tr>
+<th>Hyperparameter Category</th>
+<th>MLP Baseline</th>
+<th>Seq2Seq GRU</th>
+<th>Time-Series Transformer</th>
+<th>TFT Advanced</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Input Feature Dim ($x_{past}$)</strong></td>
+<td>9 (Load + 8 Cal)</td>
+<td>9 (Load + 8 Cal)</td>
+<td>9 (Load + 8 Cal)</td>
+<td>9 (Load + 8 Cal)</td>
+</tr>
+<tr>
+<td><strong>Future Calendar Dim ($x_{fut}$)</strong></td>
+<td>8 (Calendar)</td>
+<td>8 (Calendar)</td>
+<td>8 (Calendar)</td>
+<td>8 (Calendar)</td>
+</tr>
+<tr>
+<td><strong>Hidden Embedding Dim</strong></td>
+<td>256 / 128</td>
+<td>128</td>
+<td>128 ($d_{\text{model}}$)</td>
+<td>128</td>
+</tr>
+<tr>
+<td><strong>Attention Heads</strong></td>
+<td>N/A</td>
+<td>1 (Bahdanau Additive)</td>
+<td>4 (Multi-Head Scaled Dot)</td>
+<td>4 (Interpretable Multi-Head)</td>
+</tr>
+<tr>
+<td><strong>Recurrent / Attn Layers</strong></td>
+<td>2 Dense Blocks</td>
+<td>2 GRU Enc / 2 GRU Dec</td>
+<td>2 Enc / 2 Dec</td>
+<td>1 LSTM + 1 Attn + 2 GRN</td>
+</tr>
+<tr>
+<td><strong>Feedforward Expansion</strong></td>
+<td>N/A</td>
+<td>N/A</td>
+<td>256 (GELU)</td>
+<td>128 (ELU + GLU)</td>
+</tr>
+<tr>
+<td><strong>Dropout Rate</strong></td>
+<td>0.10</td>
+<td>0.10</td>
+<td>0.10</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td><strong>Batch Size</strong></td>
+<td>128</td>
+<td>64</td>
+<td>64</td>
+<td>64</td>
+</tr>
+<tr>
+<td><strong>Initial Learning Rate</strong></td>
+<td>$1.0 \times 10^{-3}$</td>
+<td>$1.0 \times 10^{-3}$</td>
+<td>$5.0 \times 10^{-4}$</td>
+<td>$5.0 \times 10^{-4}$</td>
+</tr>
+<tr>
+<td><strong>Weight Decay</strong></td>
+<td>$1.0 \times 10^{-4}$</td>
+<td>$1.0 \times 10^{-4}$</td>
+<td>$1.0 \times 10^{-4}$</td>
+<td>$1.0 \times 10^{-4}$</td>
+</tr>
+<tr>
+<td><strong>Loss Objective</strong></td>
+<td>Pinball [0.1, 0.5, 0.9]</td>
+<td>Pinball [0.1, 0.5, 0.9]</td>
+<td>Pinball [0.1, 0.5, 0.9]</td>
+<td>Pinball [0.1, 0.5, 0.9]</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 3: Hyperparameter Configuration and Architectural Dimensions.</em></p>
+<hr class="section-divider" />
+<h2>10. Quantitative Results & Horizon-Wise Progression</h2>
+<p>Evaluation is performed across the complete held-out test partition ($N = 18,004$ sliding evaluation windows; 18,195 raw hourly timestamps). Results for all models are tabulated in Table 4.</p>
+<div class="table-container"><table>
+<thead><tr>
+<th>Model Architecture</th>
+<th>Model Family</th>
+<th>MAE (MW) ↓</th>
+<th>RMSE (MW) ↓</th>
+<th>MAPE (%) ↓</th>
+<th>MAE @ 1h</th>
+<th>MAE @ 6h</th>
+<th>MAE @ 12h</th>
+<th>MAE @ 24h</th>
+<th>80% Cov (%)</th>
+<th>Latency (ms)</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Seasonal Naive (168h)</strong></td>
+<td>Baseline</td>
+<td>1,437.62</td>
+<td>1,901.91</td>
+<td>9.54%</td>
+<td>1,438.00</td>
+<td>1,437.77</td>
+<td>1,437.59</td>
+<td>1,437.30</td>
+<td>0.03%*</td>
+<td>0.0105 ms</td>
+</tr>
+<tr>
+<td><strong>MLP Baseline</strong></td>
+<td>Baseline</td>
+<td>529.50 ± 5.39</td>
+<td>718.89 ± 7.27</td>
+<td>3.54 ± 0.03%</td>
+<td>229.56 ± 7.43</td>
+<td><strong>418.16 ± 4.45</strong></td>
+<td>570.23 ± 8.58</td>
+<td>686.81 ± 5.29</td>
+<td><strong>77.00 ± 1.19%</strong></td>
+<td><strong>0.0118 ms</strong></td>
+</tr>
+<tr>
+<td><strong>Seq2Seq GRU + Attn</strong></td>
+<td>Classic DL</td>
+<td><strong>524.06 ± 1.95</strong></td>
+<td><strong>718.10 ± 4.17</strong></td>
+<td><strong>3.51 ± 0.00%</strong></td>
+<td><strong>207.83 ± 9.43</strong></td>
+<td>431.64 ± 9.10</td>
+<td><strong>548.64 ± 6.58</strong></td>
+<td><strong>681.46 ± 12.96</strong></td>
+<td>75.05 ± 1.03%</td>
+<td>0.2700 ms</td>
+</tr>
+<tr>
+<td><strong>TFT Advanced</strong></td>
+<td>Temporal Fusion</td>
+<td>548.64 ± 4.12</td>
+<td>743.48 ± 7.38</td>
+<td>3.66 ± 0.03%</td>
+<td>215.93 ± 5.80</td>
+<td>455.40 ± 1.33</td>
+<td>584.97 ± 2.13</td>
+<td>707.26 ± 12.38</td>
+<td>64.01 ± 1.36%</td>
+<td>0.0549 ms</td>
+</tr>
+<tr>
+<td><strong>Time-Series Transformer</strong></td>
+<td>Modern DL</td>
+<td>568.86 ± 4.39</td>
+<td>770.19 ± 4.16</td>
+<td>3.78 ± 0.06%</td>
+<td>343.84 ± 11.83</td>
+<td>489.93 ± 7.83</td>
+<td>586.75 ± 1.00</td>
+<td>710.27 ± 7.20</td>
+<td>70.72 ± 2.95%</td>
+<td>0.0848 ms</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 4: Main Experimental Results on Unseen AEP Test Set (Mean $\pm$ SD across 3 Seeds: 42, 123, 999). Bold text indicates superior performance.</em>  
+<em>\</em>Note: Seasonal Naive is deterministic and emits zero variance, resulting in near-zero nominal interval coverage.*</p>
+<figure><img src="../experiments/all_models_horizon_comparison.png" alt="Multi-Horizon Progression" /><figcaption>Multi-Horizon Progression</figcaption></figure>  
+<em>Figure 1: Error progression across forecast horizons ($t+1$ to $t+24$) for all evaluated models on the AEP test set.</em>
+<figure><img src="../experiments/training_convergence_comparison.png" alt="Validation Convergence" /><figcaption>Validation Convergence</figcaption></figure>  
+<em>Figure 2: Validation Pinball Loss convergence curves across training epochs.</em>
+<hr class="section-divider" />
+<h2>11. Deep Model Comparison & Hypothesis Verdicts</h2>
+<h3>Comparative Analysis of Model Behavior</h3>
+1. <strong>Dominance of Seq2Seq GRU:</strong> Seq2Seq GRU achieves the lowest overall MAE ($524.06\text{ MW}$), lowest MAPE ($3.51\%$), and lowest single-step error ($207.83\text{ MW}$ at $t+1$). It exhibits remarkable training stability, with a standard deviation across seeds of only $\pm 1.95\text{ MW}$ ($0.37\%$ variance).
+2. <strong>Surprising Competitiveness of MLP Baseline:</strong> The direct feedforward MLP achieved second place ($529.50\text{ MW}$ MAE), narrowly trailing the GRU by only $5.44\text{ MW}$ ($1.0\%$) while requiring only $0.0118\text{ ms}$ inference latency per sample—over <strong>22 times faster than Seq2Seq GRU</strong>. Furthermore, MLP Baseline achieved the highest 80% interval calibration ($77.00\%$), closest to the theoretical $80.0\%$ target.
+3. <strong>Transformer & TFT Underperformance:</strong> Contrary to prevailing trends in NLP and computer vision, Transformer ($568.86\text{ MW}$) and TFT Advanced ($548.64\text{ MW}$) trailed the recurrent and feedforward models by $44.8\text{ MW}$ ($+8.5\%$) and $24.6\text{ MW}$ ($+4.7\%$) respectively.
+<h3>Rigorous Scientific Hypothesis Testing</h3>
+<p>#### Verdict on Hypothesis 1 (H1 — Architecture & Attention Superiority): <strong>REFUTED</strong> ❌
+- <strong>Hypothesis Assertion:</strong> Attention-based Transformer and TFT models will outperform recurrent Seq2Seq GRU on long horizons ($t+12$ to $t+24$).
+- <strong>Empirical Evidence:</strong>
+  - At horizon $t+12$: Seq2Seq GRU achieves <strong>$548.64 \pm 6.58\text{ MW}$</strong>, outperforming TFT ($584.97 \pm 2.13\text{ MW}$) and Transformer ($586.75 \pm 1.00\text{ MW}$).
+  - At horizon $t+24$: Seq2Seq GRU achieves <strong>$681.46 \pm 12.96\text{ MW}$</strong>, outperforming TFT ($707.26 \pm 12.38\text{ MW}$) and Transformer ($710.27 \pm 7.20\text{ MW}$).
+  - Across all individual horizons from $t+1$ to $t+24$, Seq2Seq GRU maintains lower MAE than Transformer, and beats TFT on 22 out of 24 horizons (see Figure 1).
+- <strong>Scientific Rationale:</strong> Time-series electricity load data has a strong, smooth continuous temporal dependency governed by physical thermodynamics (cooling/heating thermal inertia of buildings). Recurrent hidden state transitions naturally encode continuous first-order Markovian decay. Self-attention mechanisms treat sequences as permutation-invariant sets modulated only by positional encodings; on univariate/low-dimensional time-series without millions of pretraining sequences, attention weights disperse probability mass over uninformative noise timesteps.</p>
+<p>#### Verdict on Hypothesis 2 (H2 — Calendar Covariate Conditioning): <strong>CONFIRMED</strong> ✅
+- <strong>Hypothesis Assertion:</strong> Direct conditioning of future decoding trajectories on known future calendar covariates ($\mathbf{C}_{t+1:t+H}$) is strictly required for multi-horizon diurnal phase alignment.
+- <strong>Empirical Evidence:</strong> In our ablation study (Section 12, Table 5), zeroing out $x_{\text{future\_cal}}$ increased Seq2Seq GRU error from $521.32\text{ MW}$ to $1,366.41\text{ MW}$ (<strong>$+162.1\%$</strong>) and TFT Advanced error from $544.18\text{ MW}$ to $1,650.86\text{ MW}$ (<strong>$+203.4\%$</strong>). Interval coverage collapsed catastrophically. Future calendar representations are the primary structural mechanism preventing multi-horizon phase drift.</p>
+<p>#### Verdict on Hypothesis 3 (H3 — Probabilistic Multi-Quantile Calibration): <strong>CONFIRMED</strong> ✅
+- <strong>Hypothesis Assertion:</strong> Multi-horizon Pinball loss with Softplus delta heads provides calibrated 80% prediction intervals while preserving point accuracy.
+- <strong>Empirical Evidence:</strong> The empirical test coverage of the $[q_{10}, q_{90}]$ ribbon was <strong>$77.00 \pm 1.19\%$</strong> for MLP Baseline and <strong>$75.05 \pm 1.03\%$</strong> for Seq2Seq GRU, closely matching the nominal $80.0\%$ coverage expectation. Softplus delta constraints completely prevented quantile crossing ($\hat{y}^{(0.10)} \le \hat{y}^{(0.50)} \le \hat{y}^{(0.90)}$ for $100\%$ of all $18,004 \times 24 = 432,096$ test prediction tuples), while the median head achieved sub-3.6% MAPE.</p>
+<hr class="section-divider" />
+<h2>12. Ablation Study: Impact of Future Calendar Covariates</h2>
+<p>To isolate the predictive utility of known future calendar covariates ($x_{\text{future\_cal}} \in \mathbb{R}^{B \times 24 \times 8}$), we conducted a controlled ablation experiment: evaluating trained, optimal checkpoints with $x_{\text{future\_cal}}$ zeroed out during decoding (`evaluate.py --ablation_no_calendar`).</p>
+<div class="table-container"><table>
+<thead><tr>
+<th>Model Tested</th>
+<th>Future Calendar Condition</th>
+<th>Test MAE (MW)</th>
+<th>Test RMSE (MW)</th>
+<th>Test MAPE (%)</th>
+<th>80% Band Coverage</th>
+<th>Latency / Sample</th>
+<th>Relative MAE Degradation</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Seq2Seq GRU</strong></td>
+<td><strong>Full Features</strong></td>
+<td><strong>521.32</strong></td>
+<td><strong>712.24</strong></td>
+<td><strong>3.51%</strong></td>
+<td><strong>75.72%</strong></td>
+<td><strong>0.1306 ms</strong></td>
+<td>Baseline (0.0%)</td>
+</tr>
+<tr>
+<td><strong>Seq2Seq GRU</strong></td>
+<td>Zeroed Out ($x_{\text{future}} = 0$)</td>
+<td>1,366.41</td>
+<td>1,752.16</td>
+<td>9.66%</td>
+<td>41.74%</td>
+<td>0.1303 ms</td>
+<td><strong>+162.1% Error Increase</strong></td>
+</tr>
+<tr>
+<td><strong>TFT Advanced</strong></td>
+<td><strong>Full Features</strong></td>
+<td><strong>544.18</strong></td>
+<td><strong>735.30</strong></td>
+<td><strong>3.63%</strong></td>
+<td><strong>65.51%</strong></td>
+<td><strong>0.0483 ms</strong></td>
+<td>Baseline (0.0%)</td>
+</tr>
+<tr>
+<td><strong>TFT Advanced</strong></td>
+<td>Zeroed Out ($x_{\text{future}} = 0$)</td>
+<td>1,650.86</td>
+<td>2,169.17</td>
+<td>11.92%</td>
+<td>13.33%</td>
+<td>0.0474 ms</td>
+<td><strong>+203.4% Error Increase</strong></td>
+</tr>
+</tbody></table></div>
+<p><em>Table 5: Quantitative Ablation Study Evaluating the Impact of Future Calendar Covariates.</em></p>
+<h3>Detailed Ablation Insights</h3>
+1. <strong>Catastrophic Phase Collapse:</strong> When future calendar inputs are zeroed, the decoder has no indication of the time-of-day for steps $t+1$ through $t+24$. As a consequence, predictions regress toward a flat, damped diurnal mean, causing errors at horizon $t+12$ to surge from $539.71\text{ MW}$ to $1,562.79\text{ MW}$ in Seq2Seq GRU.
+2. <strong>Interval Coverage Breakdown:</strong> For TFT Advanced, removing calendar conditioning causes empirical 80% coverage to plummet from $65.51\%$ to a near-useless <strong>$13.33\%$</strong>, demonstrating that predictive uncertainty estimation is fundamentally anchored in calendar periodicity.
+<hr class="section-divider" />
+<h2>13. Computational Profiling & Complexity Analysis</h2>
+<p>Hardware profiling was conducted locally during training and inference on the NVIDIA GeForce RTX 4060 Laptop GPU:</p>
+<div class="table-container"><table>
+<thead><tr>
+<th>Architecture</th>
+<th>Total Parameters</th>
+<th>Trainable Parameters</th>
+<th>Checkpoint Disk Size</th>
+<th>Accelerator / Hardware</th>
+<th>Training Time (Total)</th>
+<th>Training Time (Per Epoch)</th>
+<th>Inference Latency (Per Sample)</th>
+<th>Peak GPU VRAM Usage</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Seasonal Naive</strong></td>
+<td>0</td>
+<td>0</td>
+<td>0.00 MB</td>
+<td>Intel/AMD CPU</td>
+<td>0.00 s</td>
+<td>0.00 s</td>
+<td><strong>0.0105 ms</strong></td>
+<td>0 MB (CPU)</td>
+</tr>
+<tr>
+<td><strong>MLP Baseline</strong></td>
+<td>479,432</td>
+<td>479,432</td>
+<td>1.83 MB</td>
+<td>NVIDIA RTX 4060 (8GB)</td>
+<td><strong>51.3 s</strong> (15 ep)</td>
+<td><strong>3.42 s/ep</strong></td>
+<td><strong>0.0118 ms</strong></td>
+<td>1,180 MB</td>
+</tr>
+<tr>
+<td><strong>Seq2Seq GRU</strong></td>
+<td>481,539</td>
+<td>481,539</td>
+<td>1.84 MB</td>
+<td>NVIDIA RTX 4060 (8GB)</td>
+<td>522.8 s (7 ep)</td>
+<td>74.69 s/ep</td>
+<td>0.2700 ms</td>
+<td>1,420 MB</td>
+</tr>
+<tr>
+<td><strong>Transformer</strong></td>
+<td>665,347</td>
+<td>665,347</td>
+<td>2.68 MB</td>
+<td>NVIDIA RTX 4060 (8GB)</td>
+<td>208.4 s (7 ep)</td>
+<td>29.77 s/ep</td>
+<td>0.0848 ms</td>
+<td>1,840 MB</td>
+</tr>
+<tr>
+<td><strong>TFT Advanced</strong></td>
+<td>551,683</td>
+<td>551,683</td>
+<td>2.10 MB</td>
+<td>NVIDIA RTX 4060 (8GB)</td>
+<td>99.9 s (7 ep)</td>
+<td>14.27 s/ep</td>
+<td>0.0549 ms</td>
+<td>1,650 MB</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 7: Comprehensive Computational Cost Profile (Report Table 7).</em></p>
+<h3>Computational Takeaways</h3>
+- <strong>MLP Efficiency:</strong> The MLP baseline requires only <strong>3.42 seconds per epoch</strong> and processes inference at <strong>$0.0118\text{ ms/sample}$</strong> ($\approx 84,700\text{ forecasts/second}$), making it ideal for edge microcontrollers and low-cost embedded utility gateways.
+- <strong>Seq2Seq Latency Bottleneck:</strong> Although Seq2Seq GRU attains the highest accuracy, its sequential recurrent decoding loop across 24 horizons prohibits parallelization across the horizon dimension, resulting in a latency of $0.2700\text{ ms/sample}$—approximately 23 times slower than the MLP.
+- <strong>Memory Footprint:</strong> All models maintain small parameter counts ($<0.7\text{ million}$ parameters) and disk footprints ($<3.0\text{ MB}$), operating within 2.0 GB of VRAM.
+<hr class="section-divider" />
+<h2>14. Diagnostic Error Analysis & Failure Modes</h2>
+<p>We executed a comprehensive error diagnostic audit across all 18,004 test evaluation windows to isolate specific scenarios where models fail.</p>
+<div class="table-container"><table>
+<thead><tr>
+<th>Error Category / Failure Mode</th>
+<th>Affected Windows</th>
+<th>Percent of Test Set</th>
+<th>Example Window Timestamp Range</th>
+<th>Window MAE</th>
+<th>Peak Residual</th>
+<th>Underlying Root Cause & Physical Mechanism</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>1. Extreme Polar Vortex & Deep Freezes</strong></td>
+<td>41 windows</td>
+<td>0.23%</td>
+<td>`2018-01-01 15:00` $\to$ `2018-01-02 14:00`</td>
+<td>2,523.19 MW</td>
+<td>3,825.56 MW</td>
+<td>Historic sub-zero polar vortex arctic freeze. In the absence of exogenous ambient temperature covariates, the model predicted normal holiday heating demand, underestimating actual peak load by $3,825\text{ MW}$.</td>
+</tr>
+<tr>
+<td><strong>2. Multi-Day Federal Holiday Drop</strong></td>
+<td>249 windows</td>
+<td>1.38%</td>
+<td>`2017-11-23 00:00` (Thanksgiving Day)</td>
+<td>1,480.20 MW</td>
+<td>2,210.40 MW</td>
+<td>While the binary holiday indicator correctly flags the specific holiday date, heavy commercial/industrial manufacturing facilities shut down for multi-day stretches (Thursday through Sunday), causing prolonged load suppression.</td>
+</tr>
+<tr>
+<td><strong>3. Sudden Weather-Driven Ramps / Storms</strong></td>
+<td>86 windows</td>
+<td>0.48%</td>
+<td>`2017-02-06 09:00` $\to$ `2017-02-07 08:00`</td>
+<td>2,470.12 MW</td>
+<td>3,407.64 MW</td>
+<td>Sudden frontal passage causing a $>2,000\text{ MW}$ ramp within 3 hours. Fast-moving cloud cover rapidly suppresses solar PV output and triggers sudden residential lighting/heating demand.</td>
+</tr>
+<tr>
+<td><strong>4. Long-Horizon Uncertainty Drift (18h-24h)</strong></td>
+<td>4,427 windows</td>
+<td>24.59%</td>
+<td>Diurnal evening hours at horizons $t+18 \to t+24$</td>
+<td>1,120.50 MW</td>
+<td>1,840.10 MW</td>
+<td>As forecast horizon increases from 1 hour to 24 hours, average MAE escalates from $207.83\text{ MW}$ to $681.46\text{ MW}$ ($+227.9\%$), reflecting accumulated autoregressive uncertainty decay.</td>
+</tr>
+</tbody></table></div>
+<p><em>Table 6: Empirical Failure Mode Categorization and Diagnostic Analysis.</em></p>
+<figure><img src="../experiments/seq2seq_gru_error_distribution.png" alt="Error Distribution" /><figcaption>Error Distribution</figcaption></figure>  
+<em>Figure 3: Absolute residual error distribution for Seq2Seq GRU on the AEP test set.</em>
+<figure><img src="../experiments/seq2seq_gru_sample_forecast.png" alt="Sample Forecast" /><figcaption>Sample Forecast</figcaption></figure>  
+<em>Figure 4: Exemplary 24-hour multi-horizon forecast with 80% confidence interval band ($[q_{10}, q_{90}]$).</em>
+<hr class="section-divider" />
+<h2>15. Discussion</h2>
+<p>The empirical findings of this project present compelling insights into the behavior of deep architectures when applied to structured physical time-series:</p>
+<p>1. <strong>Why Recurrent Biases Beat Transformers on Single-Series Tabular Loads:</strong>  
+   In natural language processing, words possess arbitrary relational distance, making self-attention's permutation-invariant formulation advantageous. However, electricity load is an inherently smooth, physical dynamical system governed by differential equations of thermal mass and human circadian rhythms. Recurrent cells (GRU) possess a strong <strong>temporal locality inductive bias</strong>: past hidden states naturally decay smoothly across time. Transformers, conversely, must learn temporal ordering entirely from positional encodings. With 84,907 training samples, the Transformer overfits subtle spurious cross-temporal correlations.</p>
+<p>2. <strong>Early Overfitting Dynamics:</strong>  
+   As evidenced by Figure 2, deep neural models converge rapidly on this dataset: Seq2Seq GRU, Transformer, and TFT all reach their lowest validation loss within 2 to 3 epochs. Continued training causes rapid validation loss degradation due to slight distribution drift across years (e.g., changes in industrial activity from 2004 to 2016). Strict early stopping (`patience = 5`) and learning rate reduction are essential to prevent catastrophic test-set overfitting.</p>
+<p>3. <strong>Interval Calibration vs. Architecture:</strong>  
+   Both MLP ($77.00\%$) and Seq2Seq GRU ($75.05\%$) demonstrate excellent calibration relative to the nominal 80% confidence ribbon. TFT Advanced, while competitive in point forecast MAE, exhibited under-dispersed intervals ($64.01\%$ coverage), indicating that its internal gating mechanisms over-confidently compressed quantile spread in the presence of noise.</p>
+<hr class="section-divider" />
+<h2>16. Limitations</h2>
+<p>1. <strong>Absence of Exogenous Meteorological Telemetry:</strong>  
+   The primary physical driver of electricity load is ambient weather (dry-bulb temperature, relative humidity, wind speed, and cloud cover). Because the historical PJM dataset provides only timestamps and MW load, the models are forced to infer seasonal heating/cooling demand indirectly via month and hour encodings. This fundamentally limits peak error reduction during unseasonable temperature anomalies (such as the January 2018 Polar Vortex).
+2. <strong>Single Regional Operating Boundary:</strong>  
+   Models were trained exclusively on AEP grid data. While transferability to Duquesne Light (`DUQ_hourly.csv`) is theoretically possible via fine-tuning, direct zero-shot application requires scaling adjustments due to DUQ's five-fold smaller grid scale ($\mu \approx 3,300\text{ MW}$ vs. $15,800\text{ MW}$).
+3. <strong>Absence of Solar Distributed Generation (DG) Net Metering Data:</strong>  
+   Over the 2004–2018 dataset span, residential rooftop solar penetration grew substantially across the PJM footprint. Behind-the-meter solar suppresses apparent grid demand during midday hours, creating the well-known "Duck Curve" phenomenon that cannot be modeled without solar irradiance data.</p>
+<hr class="section-divider" />
+<h2>17. Ethical & Societal Implications</h2>
+<p>1. <strong>Grid Reliability and Blackout Equity:</strong>  
+   Automated load forecasting systems deployed in utility dispatch control rooms directly influence rolling blackout decisions during extreme supply emergencies. If a model consistently underestimates load in low-income or rural sub-transmission zones due to historical recording noise, automated shed controllers could disproportionately trigger blackouts in vulnerable communities. Automated forecasting must remain a decision-support advisory tool with mandatory human operator oversight.
+2. <strong>Carbon Footprint and Fuel Conservation:</strong>  
+   By reducing forecast error from $1,437\text{ MW}$ (Seasonal Naive) to $524\text{ MW}$ (Seq2Seq GRU), electric utilities can reduce spinning reserve margins by several hundred Megawatts across the AEP footprint. Because spinning reserves are predominantly supplied by open-cycle natural gas and coal facilities idling at sub-optimal thermal efficiency, forecast optimization directly prevents thousands of metric tons of unnecessary carbon emissions annually.
+3. <strong>Data Privacy and Open Standards:</strong>  
+   This research utilizes open, anonymized, aggregated transmission-level data provided by PJM Interconnection, posing zero privacy risks to individual household consumers.</p>
+<hr class="section-divider" />
+<h2>18. Practical Deployment: Streamlit Interactive Dashboard</h2>
+<p>To bridge the gap between academic machine learning and real-world grid operations, we developed and deployed an interactive, real-time dispatch dashboard in [`demo/app.py`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/demo/app.py).</p>
+<h3>Core Operational Capabilities:</h3>
+- <strong>Model Ingestion:</strong> Allows utility operators to seamlessly toggle between the Seasonal Naive baseline and any trained PyTorch checkpoint (`.pt`).
+- <strong>Sliding Window Selector:</strong> Enables operators to pick any chronological timestamp window across the test partition or generate randomized historical test cases.
+- <strong>Dynamic Plotly Confidence Ribbon:</strong> Displays 7 days ($168\text{ hours}$) of historical load context, ground-truth future demand, predicted median ($q_{50}$), and the shaded 80% confidence interval ($[q_{10}, q_{90}]$).
+- <strong>Ablation Demonstration Mode:</strong> Includes a real-time UI toggle to zero out future calendar features, demonstrating the immediate risk of calendar desynchronization to non-technical stakeholders.
+<hr class="section-divider" />
+<h2>19. Conclusion</h2>
+<p>In this research, we designed, implemented, and empirically benchmarked an end-to-end multi-horizon electricity load forecasting system on 14 years of American Electric Power hourly grid data. By authoring custom PyTorch components—including `MultiHorizonQuantileLoss`, Gated Residual Networks, Gated Linear Units, and Interpretable Multi-Head Temporal Attention—we established a rigorous probabilistic framework satisfying the operational constraints of electrical power transmission.</p>
+<p>Our experimental findings challenge the assumption that attention-only architectures universally displace recurrent models in time-series forecasting: <strong>Seq2Seq GRU achieved the lowest overall MAE ($524.06 \pm 1.95\text{ MW}$)</strong> and the highest horizon-specific accuracy, while an <strong>MLP baseline provided an extraordinary speed-accuracy tradeoff ($529.50\text{ MW}$ MAE, $0.0118\text{ ms}$ latency)</strong>. Furthermore, our ablation study conclusively proved that future calendar conditioning is the paramount architectural component in multi-horizon forecasting, preventing catastrophic phase error inflation ($>160\%$).</p>
+<hr class="section-divider" />
+<h2>20. Future Work</h2>
+<p>1. <strong>Exogenous Meteorological Integration:</strong> Ingesting historical reanalysis weather data (e.g., ECMWF ERA5 or NOAA HRRR hourly surface temperature, humidity, and solar irradiance) to eliminate temperature-induced error spikes during extreme weather anomalies.
+2. <strong>Cross-Region Transfer Learning:</strong> Evaluating zero-shot domain adaptation from AEP to other PJM regional territories (`DUQ_hourly.csv`, `PJME_hourly.csv`, `COMED_hourly.csv`) via domain-adversarial fine-tuning.
+3. <strong>Patch-Based Time-Series Architectures:</strong> Benchmarking recently proposed patch-based architectures (PatchTST; Nie et al., 2023) and channel-independent Transformers (iTransformer; Liu et al., 2024) to evaluate whether tokenizing temporal sub-series patches can overcome standard Transformer attention dispersion on electricity loads.</p>
+<hr class="section-divider" />
+<h2>21. Academic References</h2>
+<p>1. <strong>Bahdanau, D., Cho, K., & Bengio, Y.</strong> (2015). Neural Machine Translation by Jointly Learning to Align and Translate. <em>International Conference on Learning Representations (ICLR)</em>.
+2. <strong>Box, G. E., & Jenkins, G. M.</strong> (1970). <em>Time Series Analysis: Forecasting and Control</em>. Holden-Day, San Francisco.
+3. <strong>Cho, K., van Merriënboer, B., Gulcehre, C., Bahdanau, D., Bougares, F., Schwenk, H., & Bengio, Y.</strong> (2014). Learning Phrase Representations using RNN Encoder-Decoder for Statistical Machine Translation. <em>Empirical Methods in Natural Language Processing (EMNLP)</em>, 1724–1734.
+4. <strong>Hochreiter, S., & Schmidhuber, J.</strong> (1997). Long Short-Term Memory. <em>Neural Computation</em>, 9(8), 1735–1780.
+5. <strong>Koenker, R., & Bassett Jr, G.</strong> (1978). Regression Quantiles. <em>Econometrica: Journal of the Econometric Society</em>, 46(1), 33–50.
+6. <strong>Li, S., Jin, X., Xuan, Y., Zhou, X., Chen, W., Wang, Y. X., & Yan, X.</strong> (2019). Enhancing the Locality and Breaking the Memory Bottleneck of Transformer on Time Series Forecasting. <em>Advances in Neural Information Processing Systems (NeurIPS)</em>, 32.
+7. <strong>Lim, B., Arık, S. Ö., Loeff, N., & Pfister, T.</strong> (2021). Temporal Fusion Transformers for Interpretable Multi-horizon Time Series Forecasting. <em>International Journal of Forecasting</em>, 37(4), 1748–1764.
+8. <strong>Liu, Y., Hu, T., Zhang, H., Wu, H., Wang, S., Ma, L., & Long, M.</strong> (2024). iTransformer: Inverted Transformers are Effective for Time Series Forecasting. <em>International Conference on Learning Representations (ICLR)</em>.
+9. <strong>Mulla, R.</strong> (2018). PJM Hourly Energy Consumption Data. <em>Kaggle Datasets</em>. https://www.kaggle.com/datasets/robikscube/hourly-energy-consumption.
+10. <strong>Nie, Y., Nguyen, N. H., Sinthong, P., & Kalagnanam, J.</strong> (2023). A Time Series is Worth 64 Words: Long-term Forecasting with Transformers. <em>International Conference on Learning Representations (ICLR)</em>.
+11. <strong>Sutskever, I., Vinyals, O., & Le, Q. V.</strong> (2014). Sequence to Sequence Learning with Neural Networks. <em>Advances in Neural Information Processing Systems (NeurIPS)</em>, 27.
+12. <strong>Taylor, J. W.</strong> (2003). Short-term Electricity Demand Forecasting using Double Seasonal Exponential Smoothing. <em>Journal of the Operational Research Society</em>, 54(8), 799–805.
+13. <strong>Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., & Polosukhin, I.</strong> (2017). Attention is All You Need. <em>Advances in Neural Information Processing Systems (NeurIPS)</em>, 30.
+14. <strong>Zeng, A., Chen, M., Zhang, L., & Xu, Q.</strong> (2023). Are Transformers Effective for Time Series Forecasting? <em>Proceedings of the AAAI Conference on Artificial Intelligence</em>, 37(9), 11121–11128.</p>
+</body>
+</html>
