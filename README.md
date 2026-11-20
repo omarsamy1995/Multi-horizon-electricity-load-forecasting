@@ -455,6 +455,8 @@ python data/preprocess.py --raw_path data/raw/AEP_hourly.csv --out_dir data/proc
 > [!TIP]
 > The preprocessing pipeline enforces chronological sorting, DST duplicate deduplication, hourly frequency regularization, harmonic continuous calendar encoding, and fits `StandardScaler` strictly on the 70% training split ($\mu_{\text{train}} = 15,794.44\text{ MW}, \sigma_{\text{train}} = 2,577.48\text{ MW}$), serializing it to `checkpoints/aep_scaler.pkl`.
 
+> **External Drive Link (Datasets & Model Checkpoints):** [Google Drive Folder](https://drive.google.com/file/d/1L0V255yJloxeR3H2781AZkpRrEx4FT0z/view?usp=sharing) *(contains raw/processed datasets and trained `.pt` checkpoints per submission guidelines)*
+
 ---
 
 <a id="step-3-unified-multi-seed-training"></a>
@@ -579,7 +581,7 @@ Deep_Learning/
 | **Yousef Omar** | `202301858` | **Full-Stack ML (Evaluation / Web App)** | Author of the evaluation harness (`evaluate.py`), designed the future calendar ablation study, engineered the interactive Streamlit dashboard (`demo/app.py`), conducted diagnostic failure mode analysis, and compiled the technical report. |
 
 > [!IMPORTANT]
-> Detailed individual weekly hours, commit hashes, training run IDs, and verification co-signatures are maintained in [`contributions/contribution_log_template.md`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/contributions/contribution_log_template.md) and compiled into official student logs (`TeamName_StudentID_Log.pdf`).
+> Detailed individual weekly hours, commit hashes, training run IDs, and verification co-signatures are maintained in [`contributions/contribution_log_template.md`](file:///C:/Users/Lenovo/OneDrive/سطح%20المكتب/Deep_Learning/contributions/contribution_log_template.md) and compiled into official student logs (`Team AL_Log.pdf`).
 
 ---
 
