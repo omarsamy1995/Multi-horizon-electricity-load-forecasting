@@ -1,14 +1,16 @@
 """
-PyTorch Dataset and DataLoader definitions for multi-horizon electricity load forecasting.
+TensorFlow 2.x Dataset and DataLoader definitions for multi-horizon electricity load forecasting.
+Outputs tf.data.Dataset pipelines while preserving chronological leakage-free splits and scaling.
 """
 
 import os
-import torch
+from typing import Tuple, Optional
+import numpy as np
 import pandas as pd
-from torch.utils.data import Dataset, DataLoader
-from typing import Tuple
+import tensorflow as tf
 
-class MultiHorizonLoadDataset(Dataset):
+
+class MultiHorizonLoadDataset:
     """
     Sliding window dataset for multi-horizon forecasting.
     
@@ -20,18 +22,49 @@ class MultiHorizonLoadDataset(Dataset):
         y_target: Ground truth future target values of shape (horizon,) = (24,)
     """
     def __init__(self, df: pd.DataFrame, lookback: int = 168, horizon: int = 24):
-        self.data = torch.tensor(df.values, dtype=torch.float32)
+        self.data = np.asarray(df.values, dtype=np.float32)
         self.lookback = lookback
         self.horizon = horizon
+        self.length = max(0, len(self.data) - self.lookback - self.horizon + 1)
 
     def __len__(self) -> int:
-        return len(self.data) - self.lookback - self.horizon + 1
+        return self.length
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         x_past = self.data[idx : idx + self.lookback]                                           # (168, 9)
         x_future_cal = self.data[idx + self.lookback : idx + self.lookback + self.horizon, 1:]    # (24, 8)
         y_target = self.data[idx + self.lookback : idx + self.lookback + self.horizon, 0]        # (24,)
         return x_past, x_future_cal, y_target
+
+    def to_tf_dataset(
+        self,
+        batch_size: int = 64,
+        shuffle: bool = False,
+        drop_remainder: bool = False,
+        seed: Optional[int] = None
+    ) -> tf.data.Dataset:
+        total_window = self.lookback + self.horizon
+        if self.length <= 0:
+            raise ValueError(f"Data length ({len(self.data)}) is too small for lookback={self.lookback} and horizon={self.horizon}")
+
+        windows = np.lib.stride_tricks.sliding_window_view(
+            self.data, (total_window, self.data.shape[1])
+        )[:, 0, :, :]
+
+        past = np.ascontiguousarray(windows[:, :self.lookback, :], dtype=np.float32)
+        future_cal = np.ascontiguousarray(windows[:, self.lookback:, 1:], dtype=np.float32)
+        y = np.ascontiguousarray(windows[:, self.lookback:, 0], dtype=np.float32)
+
+        ds = tf.data.Dataset.from_tensor_slices((past, future_cal, y))
+
+        if shuffle:
+            buffer_size = min(len(past), 10000)
+            ds = ds.shuffle(buffer_size=buffer_size, seed=seed, reshuffle_each_iteration=True)
+
+        ds = ds.batch(batch_size, drop_remainder=drop_remainder)
+        ds = ds.prefetch(tf.data.AUTOTUNE)
+        return ds
+
 
 def get_dataloaders(
     processed_dir: str = "data/processed",
@@ -39,10 +72,11 @@ def get_dataloaders(
     horizon: int = 24,
     batch_size: int = 64,
     num_workers: int = 0,
-    pin_memory: bool = False
-) -> Tuple[DataLoader, DataLoader, DataLoader]:
+    pin_memory: bool = False,
+    seed: Optional[int] = None
+) -> Tuple[tf.data.Dataset, tf.data.Dataset, tf.data.Dataset]:
     """
-    Load preprocessed train/val/test parquets and wrap them in PyTorch DataLoaders.
+    Load preprocessed train/val/test parquets and wrap them in optimized tf.data.Dataset pipelines.
     """
     train_path = os.path.join(processed_dir, "train.parquet")
     val_path = os.path.join(processed_dir, "val.parquet")
@@ -63,27 +97,21 @@ def get_dataloaders(
     val_dataset = MultiHorizonLoadDataset(val_df, lookback=lookback, horizon=horizon)
     test_dataset = MultiHorizonLoadDataset(test_df, lookback=lookback, horizon=horizon)
 
-    train_loader = DataLoader(
-        train_dataset,
+    train_loader = train_dataset.to_tf_dataset(
         batch_size=batch_size,
         shuffle=True,
-        drop_last=True,
-        num_workers=num_workers,
-        pin_memory=pin_memory
+        drop_remainder=True,
+        seed=seed
     )
-    val_loader = DataLoader(
-        val_dataset,
+    val_loader = val_dataset.to_tf_dataset(
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory
+        drop_remainder=False
     )
-    test_loader = DataLoader(
-        test_dataset,
+    test_loader = test_dataset.to_tf_dataset(
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
-        pin_memory=pin_memory
+        drop_remainder=False
     )
 
     return train_loader, val_loader, test_loader

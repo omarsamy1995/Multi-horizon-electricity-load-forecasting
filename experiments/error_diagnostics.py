@@ -1,17 +1,33 @@
-import os, sys
+import os
+import sys
 sys.path.insert(0, os.path.abspath("."))
-import torch, joblib, numpy as np, pandas as pd
+import glob
+import joblib
+import numpy as np
+import pandas as pd
+import tensorflow as tf
 from evaluate import load_model_from_checkpoint
 from src.datasets.aep_dataset import get_dataloaders
 
 scaler = joblib.load('checkpoints/aep_scaler.pkl')
 test_df = pd.read_parquet('data/processed/test.parquet')
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-model, _ = load_model_from_checkpoint('checkpoints/seq2seq_gru_seed123_best.pt', device)
-model.eval()
+# Discover checkpoint
+ckpts = (
+    glob.glob('checkpoints/seq2seq_gru_seed123_best.keras') +
+    glob.glob('checkpoints/seq2seq_gru_seed123_best.weights.h5') +
+    glob.glob('checkpoints/seq2seq_gru_seed*_best.keras') +
+    glob.glob('checkpoints/seq2seq_gru_seed*_best.weights.h5') +
+    glob.glob('checkpoints/*seq2seq*.pt')
+)
 
-# Let's inspect sliding windows over test_df
+if not ckpts:
+    print("[WARNING] No seq2seq checkpoint found. Evaluating error diagnostics requires trained checkpoint.")
+    sys.exit(0)
+
+target_ckpt = ckpts[0]
+model, _ = load_model_from_checkpoint(target_ckpt)
+
 lookback = 168
 horizon = 24
 N = len(test_df) - lookback - horizon + 1
@@ -19,23 +35,15 @@ N = len(test_df) - lookback - horizon + 1
 timestamps = test_df.index
 data_vals = test_df.values
 
-all_maes = []
-all_peak_errors = []
-worst_windows = []
-
-# Subsample or run in batches
 batch_size = 256
 _, _, test_loader = get_dataloaders(processed_dir='data/processed', lookback=168, horizon=24, batch_size=batch_size)
 
 all_preds = []
 all_targets = []
-with torch.no_grad():
-    for x_past, x_future_cal, y_target in test_loader:
-        x_past = x_past.to(device)
-        x_future_cal = x_future_cal.to(device)
-        y_pred = model(x_past, x_future_cal)
-        all_preds.append(y_pred.cpu().numpy())
-        all_targets.append(y_target.numpy())
+for x_past, x_future_cal, y_target in test_loader:
+    y_pred = model(x_past, x_future_cal, training=False)
+    all_preds.append(y_pred.numpy() if hasattr(y_pred, "numpy") else y_pred)
+    all_targets.append(y_target.numpy() if hasattr(y_target, "numpy") else y_target)
 
 preds_arr = np.concatenate(all_preds, axis=0) # (N, 24, 3)
 targets_arr = np.concatenate(all_targets, axis=0) # (N, 24)
@@ -46,27 +54,22 @@ y_pred_mw = scaler.inverse_transform(preds_arr[:, :, 1].reshape(-1, 1)).reshape(
 abs_err = np.abs(y_true_mw - y_pred_mw)
 window_maes = np.mean(abs_err, axis=1) # (N,)
 
-# Find error categories
-# 1. Extreme Heatwave / Cold Snap (> 2500 MW window MAE)
+# Categories
 extreme_temp_mask = window_maes > 2000
 count_extreme = int(np.sum(extreme_temp_mask))
 
-# 2. Holiday Drops (dates where is_holiday == 1 in future)
 future_holidays = [np.any(data_vals[i+lookback : i+lookback+horizon, 8] > 0.5) for i in range(N)]
 future_holidays = np.array(future_holidays)
 holiday_errs = window_maes[future_holidays]
 holiday_high_err = np.sum(holiday_errs > 1000)
 
-# 3. Fast Ramp (gradient in target > 2000 MW within 3 hours)
 ramps = [np.max(np.abs(np.diff(y_true_mw[i]))) > 1500 for i in range(N)]
 ramps = np.array(ramps)
 ramp_high_err = np.sum((ramps) & (window_maes > 1000))
 
-# 4. Long-horizon drift: Error at 24h > 1.5 * Error at 1h
 drift_mask = (abs_err[:, 23] > 1.5 * abs_err[:, 0]) & (abs_err[:, 23] > 1000)
 count_drift = int(np.sum(drift_mask))
 
-# Find top 5 worst timestamps
 worst_indices = np.argsort(window_maes)[::-1][:10]
 
 print("=== ERROR DIAGNOSTICS FOR TABLE 6 ===")

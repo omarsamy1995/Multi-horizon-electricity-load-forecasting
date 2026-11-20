@@ -1,6 +1,6 @@
 """
 Streamlit Interactive Demo for Multi-Horizon Electricity Load Forecasting.
-Enables real-time 24-hour load forecasting with 10%-90% uncertainty bands.
+Enables real-time 24-hour load forecasting with 10%-90% uncertainty bands in TensorFlow 2.x.
 """
 
 import os
@@ -11,8 +11,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-import torch
-
+import tensorflow as tf
 
 if sys.platform == "win32":
     try:
@@ -24,13 +23,8 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if ROOT_DIR not in sys.path:
     sys.path.insert(0, ROOT_DIR)
 
-from src.models import (
-    SeasonalNaiveBaseline,
-    MLPBaseline,
-    Seq2SeqGRU,
-    TimeSeriesTransformer,
-    TemporalFusionModel
-)
+from evaluate import load_model_from_checkpoint
+from src.models import SeasonalNaiveBaseline
 
 st.set_page_config(
     page_title="Multi-Horizon Load Forecasting | PJM AEP",
@@ -41,11 +35,13 @@ st.set_page_config(
 SCALER_PATH = "checkpoints/aep_scaler.pkl"
 TEST_DATA_PATH = "data/processed/test.parquet"
 
+
 @st.cache_resource
 def load_scaler():
     if os.path.exists(SCALER_PATH):
         return joblib.load(SCALER_PATH)
     return None
+
 
 @st.cache_data
 def load_test_dataframe():
@@ -53,56 +49,6 @@ def load_test_dataframe():
         return pd.read_parquet(TEST_DATA_PATH)
     return None
 
-def load_checkpoint(ckpt_path: str, device: torch.device):
-    ckpt = torch.load(ckpt_path, map_location=device, weights_only=False)
-    cfg = ckpt["config"]["model"]
-    mtype = cfg.get("type", "").lower()
-
-    if mtype in ["mlp", "mlp_baseline", "baseline"]:
-        model = MLPBaseline(
-            lookback=cfg.get("lookback", 168),
-            past_dim=cfg.get("past_dim", 9),
-            horizon=cfg.get("horizon", 24),
-            future_cal_dim=cfg.get("future_cal_dim", 8),
-            hidden_dim=cfg.get("hidden_dim", 256),
-            dropout=0.0
-        )
-    elif mtype in ["seq2seq", "seq2seq_gru", "gru"]:
-        model = Seq2SeqGRU(
-            past_dim=cfg.get("past_dim", 9),
-            future_cal_dim=cfg.get("future_cal_dim", 8),
-            hidden_dim=cfg.get("hidden_dim", 128),
-            num_layers=cfg.get("num_layers", 2),
-            dropout=0.0,
-            use_attention=cfg.get("use_attention", True)
-        )
-    elif mtype in ["transformer", "transformer_enc_dec"]:
-        model = TimeSeriesTransformer(
-            past_dim=cfg.get("past_dim", 9),
-            future_cal_dim=cfg.get("future_cal_dim", 8),
-            d_model=cfg.get("d_model", 128),
-            nhead=cfg.get("nhead", 4),
-            num_encoder_layers=cfg.get("num_encoder_layers", 2),
-            num_decoder_layers=cfg.get("num_decoder_layers", 2),
-            dim_feedforward=cfg.get("dim_feedforward", 256),
-            dropout=0.0
-        )
-    elif mtype in ["tft", "tft_advanced", "temporal_fusion"]:
-        model = TemporalFusionModel(
-            past_dim=cfg.get("past_dim", 9),
-            future_cal_dim=cfg.get("future_cal_dim", 8),
-            hidden_dim=cfg.get("hidden_dim", 128),
-            n_heads=cfg.get("n_heads", 4),
-            num_lstm_layers=cfg.get("num_lstm_layers", 1),
-            dropout=0.0
-        )
-    else:
-        raise ValueError(f"Unknown model type: {mtype}")
-
-    model.load_state_dict(ckpt["model_state_dict"])
-    model.to(device)
-    model.eval()
-    return model, ckpt
 
 def main():
     st.title("⚡ Multi-Horizon Electricity Load Forecasting (AEP)")
@@ -123,9 +69,22 @@ def main():
     # Sidebar
     st.sidebar.header("🕹️ Controls & Model Selection")
 
-    # Discover available checkpoints
-    available_ckpts = glob.glob("checkpoints/*_best.pt")
-    model_choices = ["Seasonal Naive (Weekly 168h Baseline)"] + available_ckpts
+    # Discover available checkpoints (.keras, .weights.h5, .pt)
+    available_ckpts = sorted(
+        glob.glob("checkpoints/*_best.keras") +
+        glob.glob("checkpoints/*_best.weights.h5") +
+        glob.glob("checkpoints/*_best.pt")
+    )
+    # Deduplicate base names
+    unique_ckpts = []
+    seen = set()
+    for c in available_ckpts:
+        base = c.replace(".weights.h5", "").replace(".keras", "").replace(".pt", "")
+        if base not in seen:
+            seen.add(base)
+            unique_ckpts.append(c)
+
+    model_choices = ["Seasonal Naive (Weekly 168h Baseline)"] + unique_ckpts
 
     selected_model_option = st.sidebar.selectbox("Choose Forecasting Model", model_choices)
     ablation_cal = st.sidebar.checkbox("Ablation: Zero-out Future Calendar Features", value=False)
@@ -158,26 +117,24 @@ def main():
     past_dates = timestamps[idx : idx + 168]
     future_dates = timestamps[idx + 168 : idx + 168 + 24]
 
-    x_past = torch.tensor(past_slice, dtype=torch.float32).unsqueeze(0)             # (1, 168, 9)
-    x_future_cal = torch.tensor(future_slice[:, 1:], dtype=torch.float32).unsqueeze(0) # (1, 24, 8)
+    x_past = tf.constant(past_slice[np.newaxis, :, :], dtype=tf.float32)            # (1, 168, 9)
+    x_future_cal = tf.constant(future_slice[np.newaxis, :, 1:], dtype=tf.float32)    # (1, 24, 8)
     y_target_scaled = future_slice[:, 0]                                             # (24,)
 
     if ablation_cal:
-        x_future_cal = torch.zeros_like(x_future_cal)
+        x_future_cal = tf.zeros_like(x_future_cal)
 
     # Run Prediction
-    device = torch.device("cpu")
     if selected_model_option == "Seasonal Naive (Weekly 168h Baseline)":
         baseline = SeasonalNaiveBaseline(mode="weekly")
-        preds = baseline.predict(x_past, x_future_cal) # (1, 24, 3)
+        preds = baseline.predict(x_past, x_future_cal)  # (1, 24, 3)
         model_display_name = "Seasonal Naive Baseline"
     else:
-        model, ckpt = load_checkpoint(selected_model_option, device)
-        with torch.no_grad():
-            preds = model(x_past, x_future_cal)
-        model_display_name = ckpt.get("model_name", "Deep Model")
+        model, ckpt_info = load_model_from_checkpoint(selected_model_option)
+        preds = model(x_past, x_future_cal, training=False)
+        model_display_name = ckpt_info.get("model_name", "Deep Model")
 
-    preds_np = preds.squeeze(0).numpy() # (24, 3)
+    preds_np = np.squeeze(preds.numpy() if hasattr(preds, "numpy") else preds, axis=0)  # (24, 3)
 
     # Inverse transform to MW scale
     y_true_mw = scaler.inverse_transform(y_target_scaled.reshape(-1, 1)).flatten()
@@ -275,6 +232,7 @@ def main():
     })
 
     st.dataframe(h_df, use_container_width=True)
+
 
 if __name__ == "__main__":
     main()

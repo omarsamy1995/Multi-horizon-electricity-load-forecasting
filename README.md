@@ -7,7 +7,7 @@
 **American Electric Power (AEP) Hourly Grid Demand with Probabilistic Multi-Quantile Uncertainty Estimation**
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
-[![PyTorch 2.5.1](https://img.shields.io/badge/PyTorch-2.5.1%2BCU121-EE4C2C?style=flat&logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![TensorFlow 2.x](https://img.shields.io/badge/TensorFlow-2.x%20%7C%20Keras-FF6F00?style=flat&logo=tensorflow&logoColor=white)](https://tensorflow.org/)
 [![Streamlit 1.67](https://img.shields.io/badge/Streamlit-1.67-FF4B4B?style=flat&logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![CUDA 12.1](https://img.shields.io/badge/CUDA-12.1%20%7C%20RTX%204060-76B900?style=flat&logo=nvidia&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
@@ -22,7 +22,7 @@
 
 ### 🌐 Quick Navigation
 
-[Overview](#project-overview) • [Problem Formulation](#problem-formulation) • [System Architecture](#system-architecture) • [Custom PyTorch Primitives](#custom-pytorch-primitives) • [Model Zoo](#model-zoo)  
+[Overview](#project-overview) • [Problem Formulation](#problem-formulation) • [System Architecture](#system-architecture) • [Custom TensorFlow Primitives](#custom-tensorflow-primitives) • [Model Zoo](#model-zoo)  
 [Benchmark Results](#benchmark-results) • [Visual Analytics](#visual-analytics) • [Ablation Study](#ablation-study) • [Hardware Profiling](#hardware-profiling) • [Failure Modes](#failure-modes)  
 [Streamlit Live Demo](#streamlit-live-demo) • [Quick Start](#quick-start) • [Repo Structure](#repository-structure) • [Team Contributions](#team-members--contribution-log) • [References](#references--citations)
 
@@ -53,7 +53,7 @@
    - [Formal Problem Formulation & Covariate Tensor Shapes](#problem-formulation)
    - [Probabilistic Multi-Quantile Objective](#probabilistic-multi-quantile-objective)
 2. [End-to-End System Architecture](#system-architecture)
-3. [Custom PyTorch Primitives Engineered from Scratch](#custom-pytorch-primitives)
+3. [Custom TensorFlow 2.x Primitives Engineered from Scratch](#custom-tensorflow-primitives)
    - [Multi-Horizon Asymmetric Pinball Loss](#1-multi-horizon-pinball-loss-scratch-implementation)
    - [Monotonic Non-Crossing Quantile Projection Head](#2-monotonic-non-crossing-quantile-projection-head)
    - [Gated Linear Units (GLU) & Gated Residual Networks (GRN)](#3-gated-linear-unit-glu--gated-residual-network-grn)
@@ -183,8 +183,8 @@ flowchart TD
 
 ---
 
-<a id="custom-pytorch-primitives"></a>
-## 🧠 Custom PyTorch Primitives Engineered from Scratch
+<a id="custom-tensorflow-primitives"></a>
+## 🧠 Custom TensorFlow 2.x Primitives Engineered from Scratch
 
 To satisfy the core academic requirement of authoring structural architectural primitives from first principles rather than importing black-box forecasting packages, all key layers are implemented directly in [`src/models/custom_layers.py`](src/models/custom_layers.py):
 
@@ -397,7 +397,7 @@ streamlit run demo/app.py
 ```
 
 ### Dashboard Core Capabilities
-- 🔄 **Real-Time Model Switcher:** Instantly toggle between Seasonal Naive and all trained PyTorch checkpoints (`MLP`, `Seq2Seq GRU`, `Transformer`, `TFT Advanced`).
+- 🔄 **Real-Time Model Switcher:** Instantly toggle between Seasonal Naive and all trained TensorFlow checkpoints (`MLP`, `Seq2Seq GRU`, `Transformer`, `TFT Advanced`).
 - 🎲 **Interactive Test Window Sampler:** Inspect any historical dispatch window or sample randomly from held-out test years (2016–2018).
 - 📈 **Dynamic Plotly Confidence Ribbon:** Renders the 168h historical context, true demand, median forecast ($q_{50}$), and shaded 80% prediction interval ($[q_{10}, q_{90}]$).
 - ⚡ **Real-Time Operational KPIs:** Live metric cards reporting instantaneous MAE, RMSE, and MAPE in physical Megawatts.
@@ -534,7 +534,7 @@ Multi-horizon-electricity-load-forecasting/
 ├── src/                                # Core source code modules
 │   ├── datasets/
 │   │   ├── __init__.py
-│   │   └── aep_dataset.py              # MultiHorizonLoadDataset & PyTorch DataLoader builders
+│   │   └── aep_dataset.py              # MultiHorizonLoadDataset & TensorFlow tf.data.Dataset pipeline builders
 │   └── models/
 │       ├── __init__.py
 │       ├── custom_layers.py            # FROM SCRATCH: Pinball Loss, Softplus Head, GLU, GRN, Attn
@@ -570,7 +570,7 @@ Multi-horizon-electricity-load-forecasting/
 
 | Student Name | Student ID | Academic Role | Primary Module Responsibilities |
 | :--- | :---: | :--- | :--- |
-| **Omar Samy** | `202301669` | **Lead Engineer (Architecture)** | Authored custom PyTorch primitives from scratch (`MultiHorizonQuantileLoss`, `NonCrossingQuantileHead`, `GatedLinearUnit`, `GatedResidualNetwork`, `InterpretableMultiHeadAttention`), designed the Temporal Fusion Model (`tft_advanced.py`), and led architectural optimization. |
+| **Omar Samy** | `202301669` | **Lead Engineer (Architecture)** | Authored custom TensorFlow 2.x primitives from scratch (`MultiHorizonQuantileLoss`, `NonCrossingQuantileHead`, `GatedLinearUnit`, `GatedResidualNetwork`, `InterpretableMultiHeadAttention`), designed the Temporal Fusion Model (`tft_advanced.py`), and led architectural optimization. |
 | **Mohamed Ibrahim** | `202301880` | **ML Researcher (Data / Modeling)** | Engineered the leakage-free data preprocessing pipeline (`data/preprocess.py`), implemented the classic Seq2Seq GRU with Bahdanau attention and Time-Series Transformer, managed multi-seed training execution (`train.py`), and executed GPU profiling. |
 | **Yousef Omar** | `202301858` | **Full-Stack ML (Evaluation / Web App)** | Author of the evaluation harness (`evaluate.py`), designed the future calendar ablation study, engineered the interactive Streamlit dashboard (`demo/app.py`), conducted diagnostic failure mode analysis, and compiled the technical report. |
 

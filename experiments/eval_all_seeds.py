@@ -2,31 +2,37 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath("."))
 import glob
-import torch
 import joblib
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 from evaluate import load_model_from_checkpoint, evaluate_model, evaluate_seasonal_naive
 from src.datasets.aep_dataset import get_dataloaders
 
 scaler = joblib.load('checkpoints/aep_scaler.pkl')
 _, _, test_loader = get_dataloaders(processed_dir='data/processed', lookback=168, horizon=24, batch_size=128)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 models = ['mlp_baseline', 'seq2seq_gru', 'transformer', 'tft_advanced']
 results = {}
 
 for m in models:
-    ckpts = sorted(glob.glob(f'checkpoints/{m}_seed*_best.pt'))
+    ckpts = sorted(glob.glob(f'checkpoints/{m}_seed*_best.keras') + glob.glob(f'checkpoints/{m}_seed*_best.weights.h5'))
+    if not ckpts:
+        ckpts = sorted(glob.glob(f'checkpoints/{m}_seed*_best.pt'))
     results[m] = []
     for c in ckpts:
-        model, info = load_model_from_checkpoint(c, device)
-        met, _ = evaluate_model(model, test_loader, scaler, device, model_name=m)
-        results[m].append(met)
-        print(f"{c}: MAE={met['MAE (MW)']}, RMSE={met['RMSE (MW)']}, MAPE={met['MAPE (%)']}, Cov={met.get('Coverage_80_Interval (%)')}")
+        try:
+            model, info = load_model_from_checkpoint(c)
+            met, _ = evaluate_model(model, test_loader, scaler, model_name=m)
+            results[m].append(met)
+            print(f"{c}: MAE={met['MAE (MW)']}, RMSE={met['RMSE (MW)']}, MAPE={met['MAPE (%)']}, Cov={met.get('Coverage_80_Interval (%)')}")
+        except Exception as e:
+            print(f"Skipping {c}: {e}")
 
 print("\n=== SUMMARY MEAN +- SD ACROSS 3 SEEDS ===")
 for m in models:
+    if not results[m]:
+        continue
     maes = [r['MAE (MW)'] for r in results[m]]
     rmses = [r['RMSE (MW)'] for r in results[m]]
     mapes = [r['MAPE (%)'] for r in results[m]]

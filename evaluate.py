@@ -1,5 +1,5 @@
 """
-Unified Evaluation and Benchmarking Script for Multi-Horizon Electricity Load Forecasting.
+Unified Evaluation and Benchmarking Script for Multi-Horizon Electricity Load Forecasting in TensorFlow 2.x.
 
 Supports:
 - Seasonal Naive baseline evaluation (--baseline)
@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import torch
+import tensorflow as tf
 
 if sys.platform == "win32":
     try:
@@ -36,10 +36,21 @@ from src.models import (
     MLPBaseline,
     Seq2SeqGRU,
     TimeSeriesTransformer,
-    TemporalFusionModel
+    TemporalFusionModel,
+    MultiHorizonQuantileLoss,
+    NonCrossingQuantileHead,
+    GatedResidualNetwork,
+    GatedLinearUnit,
+    InterpretableMultiHeadAttention
 )
 
-def compute_metrics(y_true: np.ndarray, y_pred_median: np.ndarray, y_q10: np.ndarray = None, y_q90: np.ndarray = None) -> dict:
+
+def compute_metrics(
+    y_true: np.ndarray,
+    y_pred_median: np.ndarray,
+    y_q10: np.ndarray = None,
+    y_q90: np.ndarray = None
+) -> dict:
     """
     Compute domain evaluation metrics on unscaled physical MW scale.
     
@@ -51,7 +62,7 @@ def compute_metrics(y_true: np.ndarray, y_pred_median: np.ndarray, y_q10: np.nda
     """
     diff = y_true - y_pred_median
     abs_diff = np.abs(diff)
-    
+
     mae = float(np.mean(abs_diff))
     rmse = float(np.sqrt(np.mean(diff ** 2)))
     mape = float(np.mean(abs_diff / (np.abs(y_true) + 1e-8)) * 100.0)
@@ -78,11 +89,8 @@ def compute_metrics(y_true: np.ndarray, y_pred_median: np.ndarray, y_q10: np.nda
 
     return metrics
 
-def evaluate_seasonal_naive(
-    test_loader,
-    scaler,
-    device: torch.device = torch.device("cpu")
-) -> dict:
+
+def evaluate_seasonal_naive(test_loader, scaler) -> dict:
     """Evaluate non-parametric weekly seasonal naive baseline."""
     baseline = SeasonalNaiveBaseline(mode="weekly")
     all_preds = []
@@ -90,9 +98,9 @@ def evaluate_seasonal_naive(
 
     t0 = time.time()
     for x_past, _, y_target in test_loader:
-        preds = baseline.predict(x_past) # (B, 24, 3)
-        all_preds.append(preds.numpy())
-        all_targets.append(y_target.numpy())
+        preds = baseline.predict(x_past)  # (B, 24, 3)
+        all_preds.append(preds.numpy() if hasattr(preds, "numpy") else preds)
+        all_targets.append(y_target.numpy() if hasattr(y_target, "numpy") else y_target)
     elapsed = time.time() - t0
 
     preds_arr = np.concatenate(all_preds, axis=0)     # (N, 24, 3)
@@ -112,32 +120,29 @@ def evaluate_seasonal_naive(
 
     return metrics, (y_true_mw, y_pred_mw, y_q10_mw, y_q90_mw)
 
-def load_model_from_checkpoint(checkpoint_path: str, device: torch.device):
-    """Load architecture and weights from a saved checkpoint."""
-    ckpt = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    cfg = ckpt["config"]["model"]
-    mtype = cfg.get("type", "").lower()
 
+def instantiate_model_from_type(mtype: str, cfg: dict) -> tf.keras.Model:
+    mtype = mtype.lower()
     if mtype in ["mlp", "mlp_baseline", "baseline"]:
-        model = MLPBaseline(
+        return MLPBaseline(
             lookback=cfg.get("lookback", 168),
             past_dim=cfg.get("past_dim", 9),
             horizon=cfg.get("horizon", 24),
             future_cal_dim=cfg.get("future_cal_dim", 8),
             hidden_dim=cfg.get("hidden_dim", 256),
-            dropout=cfg.get("dropout", 0.1)
+            dropout=cfg.get("dropout", 0.0)
         )
     elif mtype in ["seq2seq", "seq2seq_gru", "gru"]:
-        model = Seq2SeqGRU(
+        return Seq2SeqGRU(
             past_dim=cfg.get("past_dim", 9),
             future_cal_dim=cfg.get("future_cal_dim", 8),
             hidden_dim=cfg.get("hidden_dim", 128),
             num_layers=cfg.get("num_layers", 2),
-            dropout=cfg.get("dropout", 0.1),
+            dropout=cfg.get("dropout", 0.0),
             use_attention=cfg.get("use_attention", True)
         )
     elif mtype in ["transformer", "transformer_enc_dec"]:
-        model = TimeSeriesTransformer(
+        return TimeSeriesTransformer(
             past_dim=cfg.get("past_dim", 9),
             future_cal_dim=cfg.get("future_cal_dim", 8),
             d_model=cfg.get("d_model", 128),
@@ -145,65 +150,108 @@ def load_model_from_checkpoint(checkpoint_path: str, device: torch.device):
             num_encoder_layers=cfg.get("num_encoder_layers", 2),
             num_decoder_layers=cfg.get("num_decoder_layers", 2),
             dim_feedforward=cfg.get("dim_feedforward", 256),
-            dropout=cfg.get("dropout", 0.1)
+            dropout=cfg.get("dropout", 0.0)
         )
     elif mtype in ["tft", "tft_advanced", "temporal_fusion"]:
-        model = TemporalFusionModel(
+        return TemporalFusionModel(
             past_dim=cfg.get("past_dim", 9),
             future_cal_dim=cfg.get("future_cal_dim", 8),
             hidden_dim=cfg.get("hidden_dim", 128),
             n_heads=cfg.get("n_heads", 4),
             num_lstm_layers=cfg.get("num_lstm_layers", 1),
-            dropout=cfg.get("dropout", 0.1)
+            dropout=cfg.get("dropout", 0.0)
         )
     else:
-        raise ValueError(f"Unknown model type in checkpoint: {mtype}")
+        raise ValueError(f"Unknown model type: {mtype}")
 
-    model.load_state_dict(ckpt["model_state_dict"])
-    model.to(device)
-    model.eval()
-    return model, ckpt
+
+def load_model_from_checkpoint(checkpoint_path: str):
+    """Load architecture and weights from saved TensorFlow checkpoint (.keras or .weights.h5 or json)."""
+    base_no_ext = os.path.splitext(checkpoint_path)[0]
+    if base_no_ext.endswith(".weights"):
+        base_no_ext = os.path.splitext(base_no_ext)[0]
+    meta_path = base_no_ext + ".json"
+
+    ckpt_info = {}
+    if os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            ckpt_info = json.load(f)
+
+    cfg = ckpt_info.get("config", {}).get("model", {})
+    model_name = ckpt_info.get("model_name", "")
+
+    if not model_name or not cfg:
+        fname = os.path.basename(checkpoint_path).lower()
+        if "mlp" in fname:
+            model_name = "mlp_baseline"
+            config_file = "configs/baseline.yaml"
+        elif "seq2seq" in fname or "gru" in fname:
+            model_name = "seq2seq_gru"
+            config_file = "configs/seq2seq_gru.yaml"
+        elif "tft" in fname:
+            model_name = "tft_advanced"
+            config_file = "configs/tft_advanced.yaml"
+        elif "transformer" in fname:
+            model_name = "transformer"
+            config_file = "configs/transformer.yaml"
+        else:
+            raise ValueError(f"Cannot deduce model type for {checkpoint_path}")
+
+        if os.path.exists(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                cfg = yaml.safe_load(f)["model"]
+
+    mtype = cfg.get("type", model_name)
+    model = instantiate_model_from_type(mtype, cfg)
+    dummy_past = tf.zeros((1, 168, cfg.get("past_dim", 9)), dtype=tf.float32)
+    dummy_cal = tf.zeros((1, 24, cfg.get("future_cal_dim", 8)), dtype=tf.float32)
+    _ = model(dummy_past, dummy_cal, training=False)
+
+    weights_h5 = base_no_ext + ".weights.h5" if not checkpoint_path.endswith(".weights.h5") else checkpoint_path
+    if os.path.exists(weights_h5):
+        model.load_weights(weights_h5)
+    elif os.path.exists(checkpoint_path) and not checkpoint_path.endswith(".pt"):
+        model.load_weights(checkpoint_path)
+    else:
+        alt_weights = os.path.join("checkpoints", f"{model_name}_best.weights.h5")
+        if os.path.exists(alt_weights):
+            model.load_weights(alt_weights)
+
+    return model, {"model_name": model_name, "config": {"model": cfg}}
+
 
 def evaluate_model(
-    model: torch.nn.Module,
+    model: tf.keras.Model,
     test_loader,
     scaler,
-    device: torch.device,
+    device: str = None,
     ablation_no_calendar: bool = False,
     model_name: str = "Model"
 ) -> dict:
-    """Evaluate a PyTorch model with optional future calendar ablation."""
+    """Evaluate a TensorFlow model with optional future calendar ablation."""
     all_preds = []
     all_targets = []
 
     # Warmup for latency profiling
-    dummy_x = torch.zeros(1, 168, 9, device=device)
-    dummy_cal = torch.zeros(1, 24, 8, device=device)
-    with torch.no_grad():
-        for _ in range(5):
-            _ = model(dummy_x, dummy_cal)
+    dummy_x = tf.zeros((1, 168, 9), dtype=tf.float32)
+    dummy_cal = tf.zeros((1, 24, 8), dtype=tf.float32)
+    for _ in range(5):
+        _ = model(dummy_x, dummy_cal, training=False)
 
     total_infer_time = 0.0
     total_samples = 0
 
-    with torch.no_grad():
-        for x_past, x_future_cal, y_target in test_loader:
-            x_past = x_past.to(device)
-            if ablation_no_calendar:
-                x_future_cal = torch.zeros_like(x_future_cal)
-            x_future_cal = x_future_cal.to(device)
+    for x_past, x_future_cal, y_target in test_loader:
+        if ablation_no_calendar:
+            x_future_cal = tf.zeros_like(x_future_cal)
 
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-            t_start = time.time()
-            y_pred = model(x_past, x_future_cal) # (B, 24, 3)
-            if device.type == "cuda":
-                torch.cuda.synchronize()
-            total_infer_time += (time.time() - t_start)
-            total_samples += x_past.size(0)
+        t_start = time.time()
+        y_pred = model(x_past, x_future_cal, training=False)
+        total_infer_time += (time.time() - t_start)
+        total_samples += int(tf.shape(x_past)[0])
 
-            all_preds.append(y_pred.cpu().numpy())
-            all_targets.append(y_target.numpy())
+        all_preds.append(y_pred.numpy() if hasattr(y_pred, "numpy") else y_pred)
+        all_targets.append(y_target.numpy() if hasattr(y_target, "numpy") else y_target)
 
     preds_arr = np.concatenate(all_preds, axis=0)     # (N, 24, 3)
     targets_arr = np.concatenate(all_targets, axis=0) # (N, 24)
@@ -216,12 +264,13 @@ def evaluate_model(
     y_q90_mw = scaler.inverse_transform(preds_arr[:, :, 2].reshape(-1, 1)).reshape(N, H)
 
     metrics = compute_metrics(y_true_mw, y_pred_mw, y_q10_mw, y_q90_mw)
-    latency_ms = (total_infer_time / total_samples) * 1000.0
+    latency_ms = (total_infer_time / max(1, total_samples)) * 1000.0
     metrics["Latency (ms/sample)"] = round(latency_ms, 4)
     metrics["Model"] = model_name
     metrics["Ablation_No_Calendar"] = ablation_no_calendar
 
     return metrics, (y_true_mw, y_pred_mw, y_q10_mw, y_q90_mw)
+
 
 def save_evaluation_plots(metrics: dict, plot_data: tuple, model_name: str, out_dir: str = "experiments"):
     """Generate and save publication-quality evaluation figures."""
@@ -245,7 +294,7 @@ def save_evaluation_plots(metrics: dict, plot_data: tuple, model_name: str, out_
     print(f"[PLOT] Saved horizon curve to: {plot_path_horizon}")
 
     # 2. Sample 24-hour Multi-Horizon Forecast with Uncertainty Ribbon
-    sample_idx = 100 # Mid-range sample from test set
+    sample_idx = 100
     plt.figure(figsize=(10, 5))
     h_steps = np.arange(1, 25)
     plt.plot(h_steps, y_true_mw[sample_idx], label="Ground Truth (Actual MW)", color="black", linewidth=2.5)
@@ -285,23 +334,23 @@ def save_evaluation_plots(metrics: dict, plot_data: tuple, model_name: str, out_
     plt.close()
     print(f"[PLOT] Saved error distribution to: {plot_path_hist}")
 
+
 def main():
     parser = argparse.ArgumentParser(description="Evaluate multi-horizon forecasting models on test set")
     parser.add_argument("--baseline", action="store_true", help="Evaluate Seasonal Naive baseline")
-    parser.add_argument("--checkpoint", type=str, default=None, help="Path to trained model .pt checkpoint")
+    parser.add_argument("--checkpoint", type=str, default=None, help="Path to trained model checkpoint (.keras/.weights.h5)")
     parser.add_argument("--scaler_path", type=str, default="checkpoints/aep_scaler.pkl", help="Path to scaler pickle")
     parser.add_argument("--data_dir", type=str, default="data/processed", help="Path to processed parquets")
     parser.add_argument("--ablation_no_calendar", action="store_true", help="Ablation: Zero-out future calendar inputs")
     parser.add_argument("--save_plots", action="store_true", help="Generate and save evaluation plots")
     parser.add_argument("--save_metrics", action="store_true", help="Save metrics to experiments JSON/CSV")
-    parser.add_argument("--device", type=str, default=None, help="Device (cuda/cpu)")
+    parser.add_argument("--device", type=str, default=None, help="Device (cpu)")
     args = parser.parse_args()
 
     if not os.path.exists(args.scaler_path):
         raise FileNotFoundError(f"Scaler not found at {args.scaler_path}. Run 'python data/preprocess.py' first.")
 
     scaler = joblib.load(args.scaler_path)
-    device = torch.device(args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu"))
 
     _, _, test_loader = get_dataloaders(processed_dir=args.data_dir, lookback=168, horizon=24, batch_size=128)
 
@@ -309,12 +358,10 @@ def main():
         print("\n" + "=" * 60)
         print("EVALUATING: Seasonal Naive Baseline (Weekly 168h)")
         print("=" * 60)
-        metrics, plot_data = evaluate_seasonal_naive(test_loader, scaler, device=device)
+        metrics, plot_data = evaluate_seasonal_naive(test_loader, scaler)
         model_name = "seasonal_naive"
     elif args.checkpoint:
-        if not os.path.exists(args.checkpoint):
-            raise FileNotFoundError(f"Checkpoint file does not exist: {args.checkpoint}")
-        model, ckpt_info = load_model_from_checkpoint(args.checkpoint, device)
+        model, ckpt_info = load_model_from_checkpoint(args.checkpoint)
         model_name = ckpt_info.get("model_name", "model")
         print("\n" + "=" * 60)
         print(f"EVALUATING: {model_name.upper()} (Checkpoint: {args.checkpoint})")
@@ -326,13 +373,13 @@ def main():
             model=model,
             test_loader=test_loader,
             scaler=scaler,
-            device=device,
+            device=args.device,
             ablation_no_calendar=args.ablation_no_calendar,
             model_name=model_name
         )
     else:
         print("No evaluation mode specified. Defaulting to Seasonal Naive baseline (--baseline).")
-        metrics, plot_data = evaluate_seasonal_naive(test_loader, scaler, device=device)
+        metrics, plot_data = evaluate_seasonal_naive(test_loader, scaler)
         model_name = "seasonal_naive"
 
     # Print Formatted Results
@@ -358,6 +405,7 @@ def main():
         csv_path = os.path.join("experiments", f"{model_name}_metrics.csv")
         pd.DataFrame([flat_metrics]).to_csv(csv_path, index=False)
         print(f"[METRICS] Saved metrics to {json_path} and {csv_path}")
+
 
 if __name__ == "__main__":
     main()
